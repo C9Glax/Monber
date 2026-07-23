@@ -1,0 +1,21 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <UserSecretsId>341aa624-e426-4758-b669-ee920a1e30ad</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\MonberAPI.ServiceDefaults\MonberAPI.ServiceDefaults.csproj" />
+      <ProjectReference Include="..\Services.POI\Services.POI.csproj" />
+      <ProjectReference Include="..\Services.Prices\Services.Prices.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Scalar.Aspire" Version="0.11.11" />
+    </ItemGroup>
+
+</Project>
