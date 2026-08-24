@@ -9,24 +9,21 @@ namespace Services.Prices.Fetching;
 /// one request, and a search page whose HTML embeds this week's promotional-offer data as JSON. There is
 /// no full everyday-catalog price API - only the current flyer (Angebote).
 ///
-/// KNOWN LIMITATION (confirmed live, not a guess): the `/.klstorebygeo.storeName={value}.json` call below
-/// does NOT actually select the named store - live testing shows it ignores the storeName value entirely
-/// and returns whatever store the server's IP-geolocation resolves the caller to (ignoring the value did
-/// not even error; a bogus storeName still returned "Kaufland Neckarsulm", the chain's HQ location, or a
-/// different geo-guessed store from a different network - never the requested one). No `Set-Cookie` was
-/// observed either, so there's no session-selection happening. Net effect: FetchPricesAsync currently
-/// returns real, live-fetched Kaufland flyer prices, but NOT reliably scoped to the requested `store` -
-/// it reflects whichever store Kaufland's own geolocation picks for this server's outbound IP. Getting
-/// real per-store scoping requires further investigation (e.g. a different selection mechanism, a
-/// required first-visit/session-establishing request, or an entirely different endpoint) that a fresh
-/// DevTools capture of an actual store switch on the live site would be needed to pin down.
+/// Store selection: the `/.klstorebygeo.storeName={value}.json` selector (from the site's own JS
+/// settings) turned out to be a dead end - live testing showed it ignores the storeName value and falls
+/// back to IP-geolocation. But `/.klstorebygeo.json?lat={lat}&lng={lng}` (note: `lng`, not `lon`) DOES
+/// work - confirmed live: it returns the exact store nearest those coordinates, sets a real `affinity`
+/// session cookie, and a subsequent `/suche.html` search genuinely reflects that store's own flyer
+/// (verified by selecting two different stores 700km apart and observing the store id in each response
+/// match what was requested). Since DiscoverStoresAsync already captures each store's own lat/lng from
+/// the store finder, we select stores by their own coordinates rather than any chain-provided identifier.
 /// </summary>
 internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetcher
 {
     public string Brand => "Kaufland";
 
     private const string StoreFinderUrl = "https://filiale.kaufland.de/.klstorefinder.json";
-    private const string SelectStoreUrlTemplate = "https://filiale.kaufland.de/.klstorebygeo.storeName={0}.json";
+    private const string SelectStoreUrlTemplate = "https://filiale.kaufland.de/.klstorebygeo.json?lat={0}&lng={1}";
     private const string SearchUrlTemplate = "https://filiale.kaufland.de/suche.html?q={0}";
 
     public async Task<ChainStore[]> DiscoverStoresAsync(CancellationToken ct)
@@ -46,7 +43,13 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
 
     public async Task<ChainPrice[]> FetchPricesAsync(ChainStore store, string[] products, CancellationToken ct)
     {
-        string selectUrl = string.Format(SelectStoreUrlTemplate, Uri.EscapeDataString(store.ExternalStoreId));
+        if (store.Latitude is not { } lat || store.Longitude is not { } lng)
+            return [];
+
+        string selectUrl = string.Format(
+            SelectStoreUrlTemplate,
+            lat.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            lng.ToString(System.Globalization.CultureInfo.InvariantCulture));
         HttpResponseMessage selectResponse = await client.GetAsync(selectUrl, ct);
         if (!selectResponse.IsSuccessStatusCode)
             return [];
