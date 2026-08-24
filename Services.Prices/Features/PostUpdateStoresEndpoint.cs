@@ -4,11 +4,11 @@ using Services.Prices.Fetching;
 
 namespace Services.Prices.Features;
 
-internal abstract class PostUpdatePricesEndpoint
+internal abstract class PostUpdateStoresEndpoint
 {
     public static async Task<NoContent> Handle(Context ctx, IHttpClientFactory httpClientFactory, CancellationToken ct)
     {
-        await PriceRefresher.RefreshAsync(ctx, PriceFetchers.All(httpClientFactory), TrackedProducts.All, ct);
+        await StoreSync.RunAsync(ctx, PriceFetchers.All(httpClientFactory), ct);
         return TypedResults.NoContent();
     }
 }

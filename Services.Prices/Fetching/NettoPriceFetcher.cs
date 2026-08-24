@@ -5,6 +5,9 @@ internal class NettoPriceFetcher : IChainPriceFetcher
 {
     public string Brand => "Netto";
 
-    public Task<ChainStorePrice[]> FetchAsync(string[] products, CancellationToken ct) =>
-        Task.FromResult<ChainStorePrice[]>([]);
+    public Task<ChainStore[]> DiscoverStoresAsync(CancellationToken ct) =>
+        Task.FromResult<ChainStore[]>([]);
+
+    public Task<ChainPrice[]> FetchPricesAsync(ChainStore store, string[] products, CancellationToken ct) =>
+        Task.FromResult<ChainPrice[]>([]);
 }

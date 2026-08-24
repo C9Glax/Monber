@@ -13,4 +13,7 @@ internal static class PriceFetchers
         new AldiPriceFetcher(),
         new PennyPriceFetcher(),
     ];
+
+    internal static Dictionary<string, IChainPriceFetcher> AllByBrand(IHttpClientFactory httpClientFactory) =>
+        All(httpClientFactory).ToDictionary(f => f.Brand);
 }

@@ -1,65 +1,99 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Services.Prices.Fetching;
 
 /// <summary>
-/// Proof-of-concept adapter: Kaufland's online shop (shop.kaufland.de) exposes JSON endpoints for its
-/// market locator and product search, scoped to a chosen pickup market. The exact endpoint paths and
-/// response shapes here are best-effort based on the shop's known structure and MUST be confirmed against
-/// the live site (e.g. via browser devtools network capture) before relying on this in production - they
-/// are not verifiable from this repository alone.
+/// Kaufland's filiale site (filiale.kaufland.de) exposes a store locator returning every German store in
+/// one request, and a search page whose HTML embeds this week's promotional-offer data as JSON. There is
+/// no full everyday-catalog price API - only the current flyer (Angebote).
+///
+/// KNOWN LIMITATION (confirmed live, not a guess): the `/.klstorebygeo.storeName={value}.json` call below
+/// does NOT actually select the named store - live testing shows it ignores the storeName value entirely
+/// and returns whatever store the server's IP-geolocation resolves the caller to (ignoring the value did
+/// not even error; a bogus storeName still returned "Kaufland Neckarsulm", the chain's HQ location, or a
+/// different geo-guessed store from a different network - never the requested one). No `Set-Cookie` was
+/// observed either, so there's no session-selection happening. Net effect: FetchPricesAsync currently
+/// returns real, live-fetched Kaufland flyer prices, but NOT reliably scoped to the requested `store` -
+/// it reflects whichever store Kaufland's own geolocation picks for this server's outbound IP. Getting
+/// real per-store scoping requires further investigation (e.g. a different selection mechanism, a
+/// required first-visit/session-establishing request, or an entirely different endpoint) that a fresh
+/// DevTools capture of an actual store switch on the live site would be needed to pin down.
 /// </summary>
-internal class KauflandPriceFetcher(HttpClient client) : IChainPriceFetcher
+internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetcher
 {
     public string Brand => "Kaufland";
 
-    private const string MarketsUrl = "https://filiale.kaufland.de/api/markets";
-    private const string SearchUrlTemplate = "https://shop.kaufland.de/api/search?marketId={0}&q={1}";
+    private const string StoreFinderUrl = "https://filiale.kaufland.de/.klstorefinder.json";
+    private const string SelectStoreUrlTemplate = "https://filiale.kaufland.de/.klstorebygeo.storeName={0}.json";
+    private const string SearchUrlTemplate = "https://filiale.kaufland.de/suche.html?q={0}";
 
-    public async Task<ChainStorePrice[]> FetchAsync(string[] products, CancellationToken ct)
+    public async Task<ChainStore[]> DiscoverStoresAsync(CancellationToken ct)
     {
-        MarketDto[]? markets = await client.GetFromJsonAsync<MarketDto[]>(MarketsUrl, ct);
-        if (markets is not { Length: > 0 })
+        StoreDto[]? stores = await client.GetFromJsonAsync<StoreDto[]>(StoreFinderUrl, ct);
+        if (stores is not { Length: > 0 })
             return [];
 
-        List<ChainStorePrice> results = [];
-        foreach (MarketDto market in markets)
+        return [.. stores
+            .Where(s => s.FriendlyUrl is not null)
+            .Select(s => new ChainStore(
+                s.FriendlyUrl!,
+                s.Name,
+                double.TryParse(s.Latitude, out double lat) ? lat : null,
+                double.TryParse(s.Longitude, out double lon) ? lon : null))];
+    }
+
+    public async Task<ChainPrice[]> FetchPricesAsync(ChainStore store, string[] products, CancellationToken ct)
+    {
+        string selectUrl = string.Format(SelectStoreUrlTemplate, Uri.EscapeDataString(store.ExternalStoreId));
+        HttpResponseMessage selectResponse = await client.GetAsync(selectUrl, ct);
+        if (!selectResponse.IsSuccessStatusCode)
+            return [];
+
+        List<ChainPrice> results = [];
+        foreach (string product in products)
         {
-            foreach (string product in products)
+            string searchUrl = string.Format(SearchUrlTemplate, Uri.EscapeDataString(product));
+            string html = await client.GetStringAsync(searchUrl, ct);
+
+            Match match = SsrBlobRegex().Match(html);
+            if (!match.Success)
+                continue;
+
+            using JsonDocument doc = JsonDocument.Parse(match.Groups[1].Value);
+            if (!doc.RootElement.TryGetProperty("props", out JsonElement props) ||
+                !props.TryGetProperty("offerData", out JsonElement offerData))
+                continue;
+
+            // Kaufland's weekly-offer search only ever returns a generic "MONSTER / Energy Drink" entry
+            // (no flavor breakdown), so matching is brand-level: a hit means "the queried product's brand
+            // is on this week's flyer for this store", not "this exact flavor is confirmed in stock".
+            foreach (JsonElement offer in offerData.EnumerateArray())
             {
-                string url = string.Format(SearchUrlTemplate, market.Id, Uri.EscapeDataString(product));
-                SearchResponseDto? response = await client.GetFromJsonAsync<SearchResponseDto>(url, ct);
-                if (response?.Results is not { Length: > 0 } items)
+                string? title = offer.TryGetProperty("title", out JsonElement t) ? t.GetString() : null;
+                if (title is null || !product.Contains(title, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                SearchResultDto match = items[0];
-                results.Add(new ChainStorePrice(
-                    market.Id,
-                    market.Name,
-                    market.Latitude,
-                    market.Longitude,
-                    product,
-                    match.Price,
-                    match.Currency));
+                if (offer.TryGetProperty("price", out JsonElement priceEl) && priceEl.TryGetDecimal(out decimal price))
+                {
+                    results.Add(new ChainPrice(product, price, "EUR"));
+                    break;
+                }
             }
         }
 
         return [.. results];
     }
 
-    [method: JsonConstructor]
-    private record MarketDto(
-        [property: JsonPropertyName("id")] string Id,
-        [property: JsonPropertyName("name")] string? Name,
-        [property: JsonPropertyName("lat")] double? Latitude,
-        [property: JsonPropertyName("lon")] double? Longitude);
+    [GeneratedRegex(@"window\.SSR\['[^']+'\]\s*=\s*(\{.*?\})\s*;?\s*</script>", RegexOptions.Singleline)]
+    private static partial Regex SsrBlobRegex();
 
     [method: JsonConstructor]
-    private record SearchResponseDto(
-        [property: JsonPropertyName("results")] SearchResultDto[] Results);
-
-    [method: JsonConstructor]
-    private record SearchResultDto(
-        [property: JsonPropertyName("price")] decimal Price,
-        [property: JsonPropertyName("currency")] string Currency);
+    private record StoreDto(
+        [property: JsonPropertyName("n")] string Id,
+        [property: JsonPropertyName("cn")] string? Name,
+        [property: JsonPropertyName("lat")] string? Latitude,
+        [property: JsonPropertyName("lng")] string? Longitude,
+        [property: JsonPropertyName("friendlyUrl")] string? FriendlyUrl);
 }
