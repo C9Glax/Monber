@@ -5,7 +5,9 @@ internal static class PriceFetchers
     internal static IChainPriceFetcher[] All(IHttpClientFactory httpClientFactory) =>
     [
         new KauflandPriceFetcher(httpClientFactory.CreateClient(nameof(KauflandPriceFetcher))),
-        new ReweePriceFetcher(),
+        new ReweePriceFetcher(
+            httpClientFactory.CreateClient(nameof(ReweePriceFetcher)),
+            new FlareSolverrClient(httpClientFactory.CreateClient("FlareSolverr"))),
         new NettoPriceFetcher(),
         new HitPriceFetcher(),
         new EdekaPriceFetcher(),

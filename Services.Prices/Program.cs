@@ -25,6 +25,31 @@ builder.Services.AddHttpClient(nameof(KauflandPriceFetcher))
         c.DefaultRequestHeaders.Referrer = new Uri("https://filiale.kaufland.de/service/kontakt.store.html");
     });
 
+// REWE sits behind Cloudflare; FlareSolverr (configured via FlareSolverr:Url, e.g. FlareSolverr__Url env
+// var) solves the challenge and hands ReweePriceFetcher real cookies/UA to replay on this plain client.
+// Both clients need a longer timeout than the service-wide default resilience handler allows: Overpass
+// queries (store discovery) run up to 60s server-side, and a FlareSolverr challenge solve can take nearly
+// as long since it drives a real browser.
+builder.Services.AddHttpClient(nameof(ReweePriceFetcher))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false })
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
+
+builder.Services.AddHttpClient("FlareSolverr", c =>
+{
+    c.BaseAddress = new Uri(builder.Configuration["FlareSolverr:Url"] ?? "http://localhost:8191");
+})
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
+
 builder.Services.AddDbContext<Context>(opts =>
 {
     opts.UseSqlite("Data Source=prices.db");
