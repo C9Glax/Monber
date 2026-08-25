@@ -1,3 +1,3 @@
 namespace Services.POI.Database;
 
-public record DbVersion(DateTimeOffset OsmBaseTimestamp, string Generator);
+public record DbVersion(long Id, DateTimeOffset OsmBaseTimestamp, string Generator);

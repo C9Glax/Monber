@@ -88,7 +88,7 @@ internal static class OverpassDataFetcher
         DbStore[] newStores = [.. dbStores.ExceptBy(dbStoreIds, s => s.Id)];
 
         await context.Stores.AddRangeAsync(newStores, ct);
-        await context.Version.AddAsync(new DbVersion(timestamp, generator), ct);
+        await context.Version.AddAsync(new DbVersion(0, timestamp, generator), ct);
         await context.SaveChangesAsync(ct);
     }
         
