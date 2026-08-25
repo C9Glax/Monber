@@ -70,13 +70,22 @@ app.UseAuthorization();
 
 app.MapGroup("").MapEndpoints();
 
-await using (AsyncServiceScope scope = app.Services.CreateAsyncScope())
+await using (AsyncServiceScope migrationScope = app.Services.CreateAsyncScope())
 {
+    Context ctx = migrationScope.ServiceProvider.GetRequiredService<Context>();
+    await ctx.Database.MigrateAsync(CancellationToken.None);
+}
+
+// Chain adapters (REWE in particular, via FlareSolverr) can each take up to ~100s to time out when
+// their upstream is unreachable. Running this in the background - rather than awaiting it here - keeps
+// the service from taking minutes to start listening whenever FlareSolverr or a chain endpoint is down.
+_ = Task.Run(async () =>
+{
+    await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
     Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
     IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
 
-    await ctx.Database.MigrateAsync(CancellationToken.None);
     await StoreSync.RunAsync(ctx, PriceFetchers.All(httpClientFactory), CancellationToken.None);
-}
+});
 
 app.Run();
