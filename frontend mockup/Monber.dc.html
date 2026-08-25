@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="_ds/nocturne-fd631da6-4492-48d8-ad30-fbbf1e8d2d84/styles.css" />
+<script src="_ds/nocturne-fd631da6-4492-48d8-ad30-fbbf1e8d2d84/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body { margin: 0; overflow: hidden; background: var(--color-bg); color: var(--color-text); }
+  .leaflet-container { background: #10121c; font-family: var(--font-body); }
+  .leaflet-control-attribution { background: rgba(22,24,38,.7) !important; color: #75798c !important; font-size: 10px !important; }
+  .leaflet-control-attribution a { color: #9397ab !important; }
+  .leaflet-bar a { background: #232532 !important; color: #e9e9ed !important; border-color: #3f424d !important; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #232532; color: #e9e9ed; box-shadow: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,.55); border-radius: 8px; }
+  .mb-pin { font: 500 12px/1 Inter, sans-serif; color: #f5f4ff; background: rgba(66,58,106,.92); border: 1px solid #796cbf; border-radius: 999px; padding: 4px 7px; white-space: nowrap; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .mb-me { width: 12px; height: 12px; border-radius: 999px; background: #9184d9; border: 2px solid #d2cefd; box-shadow: 0 0 0 6px rgba(145,132,217,.18); }
+  .mb-pin.best { background: #968ae0; border-color: #d2cefd; color: #1b1830; font-weight: 600; }
+  .mb-scroll::-webkit-scrollbar { width: 6px; }
+  .mb-scroll::-webkit-scrollbar-thumb { background: #3f424d; border-radius: 999px; }
+</style>
+</helmet>
+
+<div style="position: fixed; inset: 0; overflow: hidden;">
+
+  <div ref="{{ mapRef }}" style="position: absolute; inset: 0; z-index: 0;"></div>
+
+  <div style="position: absolute; inset: 0; z-index: 1000; pointer-events: none; display: grid; grid-template-columns: 392px 1fr auto; grid-template-rows: auto 1fr; gap: var(--space-6); padding: var(--space-6);">
+
+    <div style="grid-column: 1 / 2; grid-row: 1; pointer-events: auto; display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-6); border-radius: var(--radius-lg); border: 1px solid var(--color-neutral-800); background: color-mix(in srgb, var(--color-bg) 82%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md);">
+      <span style="font-family: var(--font-heading); font-weight: 600; font-size: 17px; letter-spacing: -0.01em;">Monber</span>
+      <span style="font-family: var(--font-heading); font-size: 17px; color: var(--color-neutral-600);">API</span>
+      <span style="margin-left: auto; font-size: 11px; color: var(--color-neutral-500); text-align: right; line-height: 1.3;">energy-drink can prices<br />nationwide</span>
+    </div>
+
+    <div style="grid-column: 3; grid-row: 1; pointer-events: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: calc(100vw - 392px - 4 * var(--space-6)); gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border-radius: var(--radius-lg); border: 1px solid var(--color-neutral-800); background: color-mix(in srgb, var(--color-bg) 82%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md);">
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; color: var(--color-neutral-300);">
+        <i class="ph ph-map-pin" style="color: var(--color-accent);"></i>{{ placeLabel }}
+      </span>
+      <span style="width: 1px; height: 20px; background: var(--color-neutral-800);"></span>
+      <div style="display: flex; gap: 2px;">
+        <sc-for list="{{ radiusOptions }}" as="opt" hint-placeholder-count="4">
+          <sc-if value="{{ opt.active }}" hint-placeholder-val="{{ false }}">
+            <button class="btn" style="font-size: 12px; padding: 5px 11px; white-space: nowrap; border-radius: var(--radius-sm); border: 1px solid var(--color-accent-600); background: color-mix(in srgb, var(--color-accent-800) 70%, transparent); color: var(--color-accent-200);" onClick="{{ opt.onClick }}">{{ opt.label }}</button>
+          </sc-if>
+          <sc-if value="{{ opt.inactive }}" hint-placeholder-val="{{ true }}">
+            <button class="btn btn-ghost" style="font-size: 12px; padding: 5px 11px; white-space: nowrap; border-radius: var(--radius-sm); border: 1px solid transparent; color: var(--color-neutral-400);" style-hover="{ borderColor: 'var(--color-accent-700)' }" onClick="{{ opt.onClick }}">{{ opt.label }}</button>
+          </sc-if>
+        </sc-for>
+      </div>
+      <span style="width: 1px; height: 20px; background: var(--color-neutral-800);"></span>
+      <div style="display: flex; align-items: center; gap: var(--space-3);">
+        <input type="range" min="1" max="{{ radiusMax }}" step="1" value="{{ radiusValue }}" onInput="{{ onRadiusInput }}" style="width: 108px; accent-color: var(--color-accent);" aria-label="Search radius" />
+        <span style="display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 8px; border: 1px solid var(--color-neutral-800); border-radius: var(--radius-sm);">
+          <input type="number" min="1" max="{{ radiusMax }}" step="1" value="{{ radiusValue }}" onInput="{{ onRadiusInput }}" style="width: 40px; background: transparent; border: 0; color: var(--color-text); font-family: var(--font-heading); font-size: 13px; padding: 0;" aria-label="Search radius in kilometres" />
+          <span style="font-size: 11px; color: var(--color-neutral-500);">km</span>
+        </span>
+      </div>
+      <span style="width: 1px; height: 20px; background: var(--color-neutral-800);"></span>
+      <button class="btn btn-ghost" style="font-size: 12px; padding: 5px 11px;" onClick="{{ locate }}"><i class="ph ph-crosshair"></i>Locate me</button>
+    </div>
+
+    <div style="grid-column: 1 / 2; grid-row: 2; pointer-events: auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4);">
+
+      <div style="flex: none; position: relative; padding: var(--space-6); border-radius: var(--radius-lg); border: 1px solid var(--color-neutral-800); background: color-mix(in srgb, var(--color-bg) 86%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md); overflow: hidden;">
+        <div style="{{ best.glowStyle }}" aria-hidden="true"></div>
+        <div style="font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-400); margin-bottom: var(--space-4);">Cheapest can near you</div>
+        <div style="display: flex; align-items: flex-start; gap: var(--space-4);">
+          <div style="font-family: var(--font-heading); font-weight: 500; font-size: 68px; line-height: 0.85; letter-spacing: -0.04em;">{{ best.price }}</div>
+          <div style="padding-top: 4px;">
+            <div style="font-size: 12px; color: var(--color-neutral-500);">per 500&nbsp;ml can</div>
+            <div style="{{ best.variantStyle }}" >{{ best.variant }}</div>
+          </div>
+        </div>
+        <div style="margin-top: var(--space-6); display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+          <span style="font-family: var(--font-heading); font-size: 17px;">{{ best.storeName }}</span>
+          <span style="font-size: 12px; color: var(--color-neutral-500);">{{ best.distance }} · {{ best.street }}</span>
+        </div>
+        <div style="margin-top: var(--space-3); display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+          <span class="tag tag-accent" style="font-size: 10px;">{{ best.savings }} under area average</span>
+          <span style="font-size: 11px; color: var(--color-neutral-600);">observed {{ best.ago }}</span>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top: var(--space-6); font-size: 13px;" onClick="{{ focusBest }}"><i class="ph ph-navigation-arrow"></i>Show on map</button>
+      </div>
+
+      <div style="flex: none; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-6) var(--space-6); border-radius: var(--radius-lg); border: 1px solid var(--color-neutral-800); background: color-mix(in srgb, var(--color-bg) 86%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md);">
+        <div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-600); padding: var(--space-2) 0 var(--space-3);">By variant</div>
+        <sc-for list="{{ variants }}" as="v" hint-placeholder-count="3">
+          <button style="{{ v.rowStyle }}" style-hover="{ borderColor: 'var(--color-neutral-700)' }" onClick="{{ v.onClick }}">
+            <span style="{{ v.dotStyle }}"></span>
+            <span style="font-family: var(--font-heading); font-size: 14px; min-width: 92px; text-align: left;">{{ v.name }}</span>
+            <span style="{{ v.priceStyle }}">{{ v.price }}</span>
+            <span style="margin-left: auto; font-size: 11px; color: var(--color-neutral-500); text-align: right;">{{ v.storeName }} · {{ v.distance }}</span>
+          </button>
+        </sc-for>
+        <sc-if value="{{ filterActive }}" hint-placeholder-val="{{ false }}">
+          <button class="btn btn-ghost" style="margin-top: var(--space-2); font-size: 11px; padding: 4px 10px; align-self: flex-start;" onClick="{{ clearFilter }}"><i class="ph ph-x"></i>Showing {{ filterLabel }} only — clear</button>
+        </sc-if>
+      </div>
+
+      <div style="flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; padding: var(--space-4) var(--space-4) var(--space-4); border-radius: var(--radius-lg); border: 1px solid var(--color-neutral-800); background: color-mix(in srgb, var(--color-bg) 86%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-md);">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: 0 var(--space-2) var(--space-4);">
+          <span style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-neutral-600);">Stores in range · {{ storeCount }}</span>
+          <span style="font-size: 11px; color: var(--color-neutral-700);">lowest first</span>
+        </div>
+        <div class="mb-scroll" style="min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); padding-right: var(--space-1);">
+          <sc-for list="{{ rows }}" as="row" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: 2px 1fr auto; gap: var(--space-1) var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer;" style-hover="{ borderColor: 'var(--color-accent-700)', background: 'color-mix(in srgb, var(--color-accent-900) 60%, transparent)' }" onClick="{{ row.onClick }}">
+              <div style="{{ row.barStyle }}" aria-hidden="true"></div>
+              <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
+                <span style="font-family: var(--font-heading); font-size: 14px;">{{ row.brand }}</span>
+                <span style="font-size: 11px; color: var(--color-neutral-500);">{{ row.distance }}</span>
+                <sc-if value="{{ row.isDeal }}" hint-placeholder-val="{{ true }}">
+                  <span class="tag tag-accent" style="font-size: 9px; padding: 1px 6px;">deal</span>
+                </sc-if>
+              </div>
+              <div style="text-align: right; font-family: var(--font-heading); font-size: 15px;">{{ row.low }}</div>
+              <div style="grid-column: 2; font-size: 11px; color: var(--color-neutral-600);">{{ row.street }} · {{ row.variant }}</div>
+              <div style="text-align: right; font-size: 10px; color: var(--color-neutral-700);">{{ row.ago }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ showApiLine }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: none; padding: var(--space-3) var(--space-4); font-size: 10px; color: var(--color-neutral-700); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
+          GET /prices?lat={{ latLabel }}&amp;lon={{ lonLabel }} · {{ radiusLabel }} km
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;radiusPresets&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;5, 10, 20, 30&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Radius&quot;},&quot;defaultRadius&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:10,&quot;min&quot;:1,&quot;max&quot;:100,&quot;unit&quot;:&quot;km&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Radius&quot;},&quot;maxRadius&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:50,&quot;min&quot;:5,&quot;max&quot;:150,&quot;step&quot;:5,&quot;unit&quot;:&quot;km&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Radius&quot;},&quot;showApiLine&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Page&quot;},&quot;dealThreshold&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.05,&quot;min&quot;:0,&quot;max&quot;:0.3,&quot;step&quot;:0.01,&quot;unit&quot;:&quot;€&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Page&quot;}}">
+class Component extends DCLogic {
+  state = {
+    radius: this.props.defaultRadius ?? 10,
+    lat: 52.5200, lon: 13.4050, place: "Berlin Mitte, DE", variant: null,
+  };
+
+  presets = () => String(this.props.radiusPresets ?? "5, 10, 20, 30")
+    .split(",").map((n) => parseInt(n, 10)).filter((n) => n > 0);
+
+  maxRadius = () => Math.max(5, this.props.maxRadius ?? 50);
+
+  setRadius = (v) => {
+    const r = Math.max(1, Math.min(this.maxRadius(), Math.round(Number(v) || 0)));
+    this.setState({ radius: r });
+  };
+
+  /* Loose, low-chroma nods to each can's own palette — no brand marks. */
+  variantDefs = [
+    { key: "orig", name: "Original", color: "oklch(0.74 0.125 152)", dim: "oklch(0.40 0.075 152)" },
+    { key: "ultra", name: "Ultra", color: "oklch(0.83 0.045 232)", dim: "oklch(0.44 0.035 232)" },
+    { key: "mango", name: "Mango Loco", color: "oklch(0.79 0.125 66)", dim: "oklch(0.44 0.085 66)" },
+  ];
+
+  variantOf = (s) => {
+    if (this.state.variant) return this.variantDefs.find((v) => v.key === this.state.variant);
+    return this.variantDefs.find((v) => s.p[v.key] === s.low) || this.variantDefs[0];
+  };
+
+  stores = [
+    { id: 8811, brand: "Kaufland", street: "Alexanderplatz 9", lat: 52.5219, lon: 13.4132, mins: 24, p: { orig: 1.09, ultra: 1.15, mango: 1.19 } },
+    { id: 8812, brand: "Netto", street: "Torstraße 112", lat: 52.5297, lon: 13.4004, mins: 41, p: { orig: 0.89, ultra: 0.99, mango: null } },
+    { id: 8813, brand: "Rewe", street: "Friedrichstraße 82", lat: 52.5165, lon: 13.3888, mins: 12, p: { orig: 1.29, ultra: 1.29, mango: 1.39 } },
+    { id: 8814, brand: "Lidl", street: "Chausseestraße 45", lat: 52.5341, lon: 13.3839, mins: 88, p: { orig: 0.95, ultra: 1.05, mango: 1.09 } },
+    { id: 8815, brand: "Penny", street: "Warschauer Straße 58", lat: 52.5093, lon: 13.4494, mins: 33, p: { orig: 1.05, ultra: null, mango: 1.15 } },
+    { id: 8816, brand: "EDEKA", street: "Prenzlauer Allee 36", lat: 52.5324, lon: 13.4225, mins: 19, p: { orig: 1.35, ultra: 1.39, mango: 1.45 } },
+    { id: 8817, brand: "ALDI", street: "Mehringdamm 33", lat: 52.4914, lon: 13.3874, mins: 57, p: { orig: 0.99, ultra: 0.99, mango: null } },
+    { id: 8818, brand: "HIT", street: "Bundesallee 21", lat: 52.4948, lon: 13.3282, mins: 130, p: { orig: 1.19, ultra: 1.25, mango: 1.29 } },
+    { id: 8819, brand: "Kaufland", street: "Möckernstraße 130", lat: 52.4986, lon: 13.3809, mins: 46, p: { orig: 1.09, ultra: 1.09, mango: 1.19 } },
+    { id: 8820, brand: "Rewe", street: "Schönhauser Allee 80", lat: 52.5443, lon: 13.4131, mins: 8, p: { orig: 1.25, ultra: 1.35, mango: 1.35 } },
+    { id: 8821, brand: "Netto", street: "Turmstraße 75", lat: 52.5279, lon: 13.3405, mins: 62, p: { orig: 0.92, ultra: 1.02, mango: 1.09 } },
+    { id: 8822, brand: "Lidl", street: "Landsberger Allee 117", lat: 52.5271, lon: 13.4622, mins: 27, p: { orig: 0.99, ultra: 1.09, mango: 1.05 } },
+    { id: 8823, brand: "Penny", street: "Kaiser-Wilhelm-Str. 4", lat: 52.4622, lon: 13.5311, mins: 51, p: { orig: 1.15, ultra: 1.19, mango: null } },
+    { id: 8824, brand: "EDEKA", street: "Gierkeplatz 2", lat: 52.5148, lon: 13.3062, mins: 71, p: { orig: 1.29, ultra: 1.29, mango: 1.33 } },
+    { id: 8825, brand: "ALDI", street: "Sonnenallee 199", lat: 52.4749, lon: 13.4433, mins: 15, p: { orig: 1.05, ultra: 0.95, mango: 1.09 } },
+    { id: 8826, brand: "Kaufland", street: "Am Borsigturm 2", lat: 52.5867, lon: 13.2871, mins: 96, p: { orig: 0.95, ultra: 1.05, mango: 1.15 } },
+  ];
+
+  mapRef = React.createRef();
+
+  componentDidMount() { this.tryInitMap(); }
+  componentDidUpdate() {
+    const key = this.state.lat + "," + this.state.lon + "," + this.state.radius + "," + this.state.variant;
+    const moved = key !== this._fitKey;
+    this._fitKey = key;
+    requestAnimationFrame(() => this.paintMarkers(moved));
+  }
+
+  tryInitMap = (tries = 0) => {
+    if (!window.L || !this.mapRef.current) {
+      if (tries < 60) setTimeout(() => this.tryInitMap(tries + 1), 150);
+      return;
+    }
+    const L = window.L;
+    this.L = L;
+    this.map = L.map(this.mapRef.current, { zoomControl: false, attributionControl: true })
+      .setView([this.state.lat, this.state.lon], 12);
+    L.control.zoom({ position: "bottomright" }).addTo(this.map);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© OpenStreetMap · © CARTO", maxZoom: 19, subdomains: "abcd",
+    }).addTo(this.map);
+    this.layer = L.layerGroup().addTo(this.map);
+    this.map.whenReady(() => {
+      this.map.invalidateSize();
+      this.ring = L.circle([this.state.lat, this.state.lon], {
+        radius: this.state.radius * 1000, color: "#968ae0", weight: 1,
+        opacity: 0.45, fillColor: "#9184d9", fillOpacity: 0.05,
+      }).addTo(this.map);
+      this.me = L.marker([this.state.lat, this.state.lon], {
+        zIndexOffset: 1000,
+        icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="mb-me"></div>' }),
+      }).addTo(this.map).bindPopup("You are here");
+      this.paintMarkers();
+    });
+  };
+
+  paintMarkers = (refit = true) => {
+    if (!this.map || !window.L) return;
+    const L = window.L;
+    this.layer.clearLayers();
+    const inRange = this.inRange();
+    const best = inRange[0];
+    if (this.ring) {
+      this.ring.setLatLng([this.state.lat, this.state.lon]);
+      this.ring.setRadius(this.state.radius * 1000);
+    }
+    if (this.me) this.me.setLatLng([this.state.lat, this.state.lon]);
+    inRange.forEach((s) => {
+      const isBest = best && s.id === best.id;
+      const v = this.variantOf(s);
+      const style = isBest
+        ? "background:" + v.color + ";border-color:" + v.color + ";color:#161826;font-weight:600;"
+        : "border-color:" + v.dim + ";color:" + v.color + ";";
+      L.marker([s.lat, s.lon], {
+        icon: L.divIcon({
+          className: "", iconSize: [48, 22], iconAnchor: [24, 11],
+          html: '<div class="mb-pin" style="' + style + '">' + this.eur(s.low) + "</div>",
+        }),
+      }).addTo(this.layer).bindPopup(
+        "<b>" + s.brand + "</b><br>" + s.street + "<br>" + this.eur(s.low) + " · " + v.name + " · " + s.dist.toFixed(1) + " km"
+      );
+    });
+    if (refit) this.fitToRange(inRange);
+  };
+
+  fitToRange = (inRange) => {
+    const L = this.L;
+    if (!L || !this.map) return;
+    const pts = inRange.map((s) => [s.lat, s.lon]).concat([[this.state.lat, this.state.lon]]);
+    let minLat = pts[0][0], maxLat = pts[0][0], minLon = pts[0][1], maxLon = pts[0][1];
+    pts.forEach(([la, lo]) => {
+      minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la);
+      minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo);
+    });
+    const eps = 0.004;
+    if (maxLat - minLat < eps) { minLat -= eps; maxLat += eps; }
+    if (maxLon - minLon < eps) { minLon -= eps; maxLon += eps; }
+    if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return;
+    const bounds = L.latLngBounds(L.latLng(minLat, minLon), L.latLng(maxLat, maxLon));
+    const size = this.map.getSize();
+    const left = Math.min(430, Math.round(size.x * 0.42));
+    const pad = L.point(left + 40, 140);
+    const zoom = Math.min(14, this.map.getBoundsZoom(bounds, false, pad));
+    const c = bounds.getCenter();
+    const shift = this.map.project(c, zoom).subtract(L.point((left - 40) / 2, 0));
+    this.map.setView(this.map.unproject(shift, zoom), zoom, { animate: false });
+  };
+
+  eur = (v) => (v == null ? "—" : "€" + v.toFixed(2));
+
+  dist = (lat, lon) => {
+    const R = 6371, d = Math.PI / 180;
+    const a = Math.sin(((lat - this.state.lat) * d) / 2) ** 2 +
+      Math.cos(this.state.lat * d) * Math.cos(lat * d) * Math.sin(((lon - this.state.lon) * d) / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  ago = (m) => (m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago");
+
+  inRange = (variantKey = this.state.variant) => this.stores
+    .map((s) => {
+      const vals = variantKey ? [s.p[variantKey]] : Object.values(s.p);
+      const clean = vals.filter((v) => v != null);
+      return { ...s, dist: this.dist(s.lat, s.lon), low: clean.length ? Math.min(...clean) : null };
+    })
+    .filter((s) => s.dist <= this.state.radius && s.low != null)
+    .sort((a, b) => a.low - b.low || a.dist - b.dist);
+
+  focus = (s) => () => {
+    if (this.map) this.map.setView([s.lat, s.lon], 15, { animate: true });
+  };
+
+  locate = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => this.setState({ lat: pos.coords.latitude, lon: pos.coords.longitude, place: "Your location" }),
+      () => {}
+    );
+  };
+
+  renderVals() {
+    const rangeStores = this.inRange();
+    const allRangeStores = this.inRange(null);
+    const best = rangeStores[0];
+    const lows = rangeStores.map((s) => s.low);
+    const areaAvg = lows.length ? lows.reduce((a, b) => a + b, 0) / lows.length : 0;
+    const bestVariant = best ? this.variantDefs.find((v) => best.p[v.key] === best.low) : null;
+
+    return {
+      placeLabel: this.state.place,
+      latLabel: this.state.lat.toFixed(4),
+      lonLabel: this.state.lon.toFixed(4),
+      radiusLabel: String(this.state.radius),
+      storeCount: String(rangeStores.length),
+      mapRef: this.mapRef,
+      locate: this.locate,
+      focusBest: best ? this.focus(best) : () => {},
+
+      best: {
+        price: this.eur(best ? best.low : null),
+        storeName: best ? best.brand : "—",
+        street: best ? best.street : "",
+        distance: best ? best.dist.toFixed(1) + " km" : "",
+        variant: bestVariant ? bestVariant.name : "",
+        variantStyle: {
+          marginTop: "4px", fontSize: "12px",
+          color: bestVariant ? bestVariant.color : "var(--color-accent-300)",
+        },
+        glowStyle: {
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: bestVariant
+            ? "radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, " + bestVariant.color + " 12%, transparent) 0%, transparent 62%)"
+            : "transparent",
+        },
+        savings: best && areaAvg ? "€" + (areaAvg - best.low).toFixed(2) : "—",
+        ago: best ? this.ago(best.mins) : "",
+      },
+
+      showApiLine: this.props.showApiLine ?? true,
+      radiusValue: this.state.radius,
+      radiusMax: this.maxRadius(),
+      onRadiusInput: (e) => this.setRadius(e.target.value),
+
+      radiusOptions: this.presets().map((r) => ({
+        label: r + " km",
+        onClick: () => this.setState({ radius: r }),
+        active: r === this.state.radius,
+        inactive: r !== this.state.radius,
+      })),
+
+      filterActive: !!this.state.variant,
+      filterLabel: this.state.variant
+        ? this.variantDefs.find((v) => v.key === this.state.variant).name
+        : "",
+      clearFilter: () => this.setState({ variant: null }),
+
+      variants: this.variantDefs.map((v) => {
+        const withPrice = allRangeStores
+          .filter((s) => s.p[v.key] != null)
+          .sort((a, b) => a.p[v.key] - b.p[v.key]);
+        const low = withPrice[0];
+        const selected = this.state.variant === v.key;
+        return {
+          name: v.name,
+          price: this.eur(low ? low.p[v.key] : null),
+          onClick: () => this.setState({ variant: selected ? null : v.key }),
+          rowStyle: {
+            display: "flex", alignItems: "baseline", gap: "var(--space-3)",
+            padding: "var(--space-3) var(--space-3)", cursor: "pointer",
+            borderRadius: "var(--radius-md)", font: "inherit", color: "inherit",
+            border: "1px solid " + (selected ? v.dim : "transparent"),
+            borderTopColor: selected ? v.dim : "var(--color-neutral-900)",
+            background: selected
+              ? "color-mix(in srgb, " + v.color + " 10%, transparent)"
+              : "transparent",
+          },
+          storeName: low ? low.brand : "no stock nearby",
+          distance: low ? low.dist.toFixed(1) + " km" : "",
+          dotStyle: { width: "6px", height: "6px", borderRadius: "999px", flex: "none", background: v.color },
+          priceStyle: {
+            fontFamily: "var(--font-heading)", fontSize: "19px",
+            letterSpacing: "-0.02em", color: v.color,
+          },
+        };
+      }),
+
+      rows: rangeStores.map((s) => ({
+        brand: s.brand,
+        barStyle: { gridRow: "1 / 3", borderRadius: "999px", opacity: 0.85, background: this.variantOf(s).color },
+        variant: this.variantOf(s).name,
+        street: s.street,
+        distance: s.dist.toFixed(1) + " km",
+        low: this.eur(s.low),
+        isDeal: s.low < areaAvg - (this.props.dealThreshold ?? 0.05),
+        ago: this.ago(s.mins),
+        onClick: this.focus(s),
+      })),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
