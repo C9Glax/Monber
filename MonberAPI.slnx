@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="MonberAPI.AppHost/MonberAPI.AppHost.csproj" />
   <Project Path="MonberAPI.Gateway/MonberAPI.Gateway.csproj" />
+  <Project Path="MonberAPI.PoiData/MonberAPI.PoiData.csproj" />
   <Project Path="MonberAPI.ServiceDefaults/MonberAPI.ServiceDefaults.csproj" />
   <Project Path="Services.POI/Services.POI.csproj" />
   <Project Path="Services.Prices/Services.Prices.csproj" />

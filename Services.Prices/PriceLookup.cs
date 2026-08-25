@@ -15,15 +15,15 @@ internal static class PriceLookup
 {
     internal static async Task<PriceObservation[]> GetPricesAsync(
         Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
-        DbStore[] stores, string[] products, CancellationToken ct)
+        PricedStore[] stores, string[] products, CancellationToken ct)
     {
         DateOnly today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
         List<PriceObservation> results = [];
 
-        foreach (DbStore store in stores)
+        foreach (PricedStore store in stores)
         {
             DbPriceObservation[] existing = await ctx.Prices
-                .Where(p => p.StoreId == store.Id && products.Contains(p.Product))
+                .Where(p => p.StoreId == store.StoreId && products.Contains(p.Product))
                 .ToArrayAsync(ct);
 
             string[] fresh = [.. existing
@@ -38,12 +38,12 @@ internal static class PriceLookup
                 {
                     ChainPrice[] live = await fetcher.FetchPricesAsync(chainStore, stale, ct);
                     foreach (ChainPrice price in live)
-                        ctx.Prices.Add(new DbPriceObservation(0, store.Id, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow));
+                        ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow));
 
                     if (live.Length > 0)
                     {
                         await ctx.SaveChangesAsync(ct);
-                        existing = [.. existing, .. ctx.Prices.Local.Where(p => p.StoreId == store.Id && live.Any(l => l.Product == p.Product))];
+                        existing = [.. existing, .. ctx.Prices.Local.Where(p => p.StoreId == store.StoreId && live.Any(l => l.Product == p.Product))];
                     }
                 }
                 catch (Exception)

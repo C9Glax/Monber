@@ -1,12 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using MonberAPI.PoiData.Database;
 using Services.Prices.Database;
 using Services.Prices.Fetching;
 
 namespace Services.Prices;
 
 /// <summary>
-/// Keeps the local store cache fresh. Cheap and bulk (one request per chain for most adapters), so this
-/// runs on a schedule - unlike price lookups, which are only ever fetched on demand (see PriceLookup).
+/// Keeps the (Brand, ExternalStoreId) -> shared store id mapping fresh. Cheap and bulk (one request per
+/// chain for most adapters), so this runs on a schedule - unlike price lookups, which are only ever
+/// fetched on demand (see PriceLookup). The shared `stores` table itself is owned/written only by
+/// Services.POI; a chain store with no matching POI-synced location yet is simply skipped until a later
+/// pass (of either service) resolves one - see PoiStoreMatching.
 /// </summary>
 internal static class StoreSync
 {
@@ -31,20 +35,24 @@ internal static class StoreSync
                 continue;
             }
 
+            DbStore[] candidates = await ctx.Stores.Where(s => s.Brand == fetcher.Brand).ToArrayAsync(ct);
+
             foreach (ChainStore store in stores)
             {
-                DbStore? existing = await ctx.Stores.SingleOrDefaultAsync(
-                    s => s.Brand == fetcher.Brand && s.ExternalStoreId == store.ExternalStoreId, ct);
+                if (store.Latitude is not { } lat || store.Longitude is not { } lon)
+                    continue;
+
+                long? matchedStoreId = PoiStoreMatching.FindNearest(candidates, lat, lon);
+                if (matchedStoreId is not { } storeId)
+                    continue;
+
+                DbStoreExternalId? existing = await ctx.StoreExternalIds.SingleOrDefaultAsync(
+                    e => e.Brand == fetcher.Brand && e.ExternalStoreId == store.ExternalStoreId, ct);
 
                 if (existing is null)
-                    ctx.Stores.Add(new DbStore(0, fetcher.Brand, store.ExternalStoreId, store.Name, store.Latitude, store.Longitude));
-                else
-                    ctx.Entry(existing).CurrentValues.SetValues(existing with
-                    {
-                        Name = store.Name,
-                        Latitude = store.Latitude,
-                        Longitude = store.Longitude
-                    });
+                    ctx.StoreExternalIds.Add(new DbStoreExternalId(fetcher.Brand, store.ExternalStoreId, storeId));
+                else if (existing.StoreId != storeId)
+                    ctx.Entry(existing).CurrentValues.SetValues(existing with { StoreId = storeId });
             }
 
             if (version is null)

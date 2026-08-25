@@ -6,7 +6,7 @@ namespace Services.Prices.Entities;
 [method: JsonConstructor]
 public record StoreSummary(long StoreId, string Brand, string? Name, double? Latitude, double? Longitude)
 {
-    [Description("The id of the store, used as storeId in the /prices endpoints")]
+    [Description("The id of the store, used as storeId in the /prices endpoints - same id as Services.POI's store id for this location")]
     public long StoreId { get; init; } = StoreId;
 
     [Description("The store brand")]

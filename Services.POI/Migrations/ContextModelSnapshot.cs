@@ -17,7 +17,7 @@ namespace Services.POI.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
-            modelBuilder.Entity("Services.POI.Database.DbStore", b =>
+            modelBuilder.Entity("MonberAPI.PoiData.Database.DbStore", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()

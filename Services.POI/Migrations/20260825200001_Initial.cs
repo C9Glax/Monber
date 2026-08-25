@@ -33,12 +33,14 @@ namespace Services.POI.Migrations
                 name: "versions",
                 columns: table => new
                 {
-                    Generator = table.Column<string>(type: "TEXT", nullable: false),
-                    OsmBaseTimestamp = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    OsmBaseTimestamp = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    Generator = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_versions", x => x.Generator);
+                    table.PrimaryKey("PK_versions", x => x.Id);
                 });
         }
 

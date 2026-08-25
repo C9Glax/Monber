@@ -11,7 +11,7 @@ using Services.POI.Database;
 namespace Services.POI.Migrations
 {
     [DbContext(typeof(Context))]
-    [Migration("20260723001408_Initial")]
+    [Migration("20260825200001_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -20,7 +20,7 @@ namespace Services.POI.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
-            modelBuilder.Entity("Services.POI.Database.DbStore", b =>
+            modelBuilder.Entity("MonberAPI.PoiData.Database.DbStore", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -53,13 +53,18 @@ namespace Services.POI.Migrations
 
             modelBuilder.Entity("Services.POI.Database.DbVersion", b =>
                 {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Generator")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("OsmBaseTimestamp")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Generator");
+                    b.HasKey("Id");
 
                     b.ToTable("versions", (string)null);
                 });

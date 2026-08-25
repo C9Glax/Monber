@@ -1,4 +1,4 @@
-using Services.POI.Database;
+using MonberAPI.PoiData.Database;
 
 namespace Services.POI.Extensions;
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Services.Prices;
 using Services.Prices.Database;
 using Services.Prices.Entities;
 using Services.Prices.Extensions;
@@ -11,9 +12,7 @@ internal abstract class GetStoresEndpoint
 {
     public static async Task<Ok<StoreSummary[]>> Handle(Context ctx, [FromQuery(Name = "brand")] string? brand, CancellationToken ct)
     {
-        DbStore[] stores = await ctx.Stores
-            .Where(s => brand == null || s.Brand == brand)
-            .ToArrayAsync(ct);
+        PricedStore[] stores = await PricedStore.Query(ctx, brand: brand).ToArrayAsync(ct);
 
         return TypedResults.Ok(stores.Select(s => s.ToDto()).ToArray());
     }
