@@ -50,9 +50,11 @@ builder.Services.AddHttpClient("FlareSolverr", c =>
         o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 
+// Shared with Services.POI - both services run with their own project directory as CWD, so this
+// resolves to the same file at the repo root for both.
 builder.Services.AddDbContext<Context>(opts =>
 {
-    opts.UseSqlite("Data Source=prices.db");
+    opts.UseSqlite("Data Source=../monber.db", sqlite => sqlite.MigrationsHistoryTable("__EFMigrationsHistory_Prices"));
     opts.EnableSensitiveDataLogging();
     opts.EnableDetailedErrors();
 });
@@ -74,6 +76,11 @@ await using (AsyncServiceScope migrationScope = app.Services.CreateAsyncScope())
 {
     Context ctx = migrationScope.ServiceProvider.GetRequiredService<Context>();
     await ctx.Database.MigrateAsync(CancellationToken.None);
+
+    // Services.POI opens the same file - WAL lets this service read while POI writes, and the busy
+    // timeout absorbs the brief lock contention if both services migrate at startup at the same time.
+    await ctx.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", CancellationToken.None);
+    await ctx.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout=5000;", CancellationToken.None);
 }
 
 // Chain adapters (REWE in particular, via FlareSolverr) can each take up to ~100s to time out when

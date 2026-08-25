@@ -19,6 +19,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\MonberAPI.PoiData\MonberAPI.PoiData.csproj" />
       <ProjectReference Include="..\MonberAPI.ServiceDefaults\MonberAPI.ServiceDefaults.csproj" />
     </ItemGroup>
 

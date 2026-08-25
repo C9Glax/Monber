@@ -4,8 +4,11 @@ using System.Text.Json.Serialization;
 namespace Services.POI.Entities;
 
 [method: JsonConstructor]
-public record Store(string? Name, double Latitude, double Longitude, string Brand, string? OpeningHours)
+public record Store(long Id, string? Name, double Latitude, double Longitude, string Brand, string? OpeningHours)
 {
+    [Description("The store id (the OpenStreetMap node/way id)")]
+    public long Id { get; init; } = Id;
+
     [Description("The store brand")]
     public string Brand { get; init; } = Brand;
     

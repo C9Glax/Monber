@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Services.Prices;
 using Services.Prices.Database;
 using Services.Prices.Entities;
 using Services.Prices.Fetching;
@@ -13,7 +14,7 @@ internal abstract class GetPricesByStoreEndpoint
         Context ctx, IHttpClientFactory httpClientFactory,
         [FromQuery(Name = "storeId")] long storeId, CancellationToken ct)
     {
-        DbStore? store = await ctx.Stores.SingleOrDefaultAsync(s => s.Id == storeId, ct);
+        PricedStore? store = await PricedStore.Query(ctx, storeId: storeId).SingleOrDefaultAsync(ct);
         if (store is null)
             return TypedResults.NotFound();
 

@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using MonberAPI.PoiData.Database;
 using Services.POI.Database;
 using Services.POI.Extensions;
 

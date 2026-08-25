@@ -17,6 +17,40 @@ namespace Services.Prices.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
 
+            modelBuilder.Entity("MonberAPI.PoiData.Database.DbStore", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Brand")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OpeningHours")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Shop")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("stores", null, t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
             modelBuilder.Entity("Services.Prices.Database.DbPriceObservation", b =>
                 {
                     b.Property<long>("Id")
@@ -57,38 +91,26 @@ namespace Services.Prices.Migrations
 
                     b.HasKey("Brand");
 
-                    b.ToTable("versions", (string)null);
+                    b.ToTable("price_sync_versions", (string)null);
                 });
 
-            modelBuilder.Entity("Services.Prices.Database.DbStore", b =>
+            modelBuilder.Entity("Services.Prices.Database.DbStoreExternalId", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Brand")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ExternalStoreId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("REAL");
+                    b.Property<long>("StoreId")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("REAL");
+                    b.HasKey("Brand", "ExternalStoreId");
 
-                    b.Property<string>("Name")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Brand", "ExternalStoreId")
+                    b.HasIndex("StoreId")
                         .IsUnique();
 
-                    b.ToTable("stores", (string)null);
+                    b.ToTable("store_external_ids", (string)null);
                 });
 #pragma warning restore 612, 618
         }

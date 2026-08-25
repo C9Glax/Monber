@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Services.Prices.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -29,24 +29,7 @@ namespace Services.Prices.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "stores",
-                columns: table => new
-                {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Brand = table.Column<string>(type: "TEXT", nullable: false),
-                    ExternalStoreId = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: true),
-                    Latitude = table.Column<double>(type: "REAL", nullable: true),
-                    Longitude = table.Column<double>(type: "REAL", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_stores", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "versions",
+                name: "price_sync_versions",
                 columns: table => new
                 {
                     Brand = table.Column<string>(type: "TEXT", nullable: false),
@@ -54,7 +37,20 @@ namespace Services.Prices.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_versions", x => x.Brand);
+                    table.PrimaryKey("PK_price_sync_versions", x => x.Brand);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "store_external_ids",
+                columns: table => new
+                {
+                    Brand = table.Column<string>(type: "TEXT", nullable: false),
+                    ExternalStoreId = table.Column<string>(type: "TEXT", nullable: false),
+                    StoreId = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_store_external_ids", x => new { x.Brand, x.ExternalStoreId });
                 });
 
             migrationBuilder.CreateIndex(
@@ -63,9 +59,9 @@ namespace Services.Prices.Migrations
                 columns: new[] { "StoreId", "Product", "FetchedAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_stores_Brand_ExternalStoreId",
-                table: "stores",
-                columns: new[] { "Brand", "ExternalStoreId" },
+                name: "IX_store_external_ids_StoreId",
+                table: "store_external_ids",
+                column: "StoreId",
                 unique: true);
         }
 
@@ -76,10 +72,10 @@ namespace Services.Prices.Migrations
                 name: "price_observations");
 
             migrationBuilder.DropTable(
-                name: "stores");
+                name: "price_sync_versions");
 
             migrationBuilder.DropTable(
-                name: "versions");
+                name: "store_external_ids");
         }
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MonberAPI.PoiData.Database;
 
 namespace Services.POI.Database;
 
