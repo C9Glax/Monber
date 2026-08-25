@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\MonberAPI.Gateway\MonberAPI.Gateway.csproj" />
       <ProjectReference Include="..\MonberAPI.ServiceDefaults\MonberAPI.ServiceDefaults.csproj" />
       <ProjectReference Include="..\Services.POI\Services.POI.csproj" />
       <ProjectReference Include="..\Services.Prices\Services.Prices.csproj" />
