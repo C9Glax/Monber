@@ -15,6 +15,6 @@ internal class Context(DbContextOptions<Context> options) : DbContext(options)
 
         modelBuilder.Entity<DbVersion>()
             .ToTable("versions")
-            .HasKey(v => v.Generator);
+            .HasKey(v => v.Id);
     }
 }
