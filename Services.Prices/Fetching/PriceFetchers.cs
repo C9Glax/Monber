@@ -2,20 +2,33 @@ namespace Services.Prices.Fetching;
 
 internal static class PriceFetchers
 {
-    internal static IChainPriceFetcher[] All(IHttpClientFactory httpClientFactory) =>
-    [
-        new KauflandPriceFetcher(httpClientFactory.CreateClient(nameof(KauflandPriceFetcher))),
-        new ReweePriceFetcher(
-            httpClientFactory.CreateClient(nameof(ReweePriceFetcher)),
-            new FlareSolverrClient(httpClientFactory.CreateClient("FlareSolverr"))),
-        new NettoPriceFetcher(),
-        new HitPriceFetcher(),
-        new EdekaPriceFetcher(),
-        new LidlPriceFetcher(),
-        new AldiPriceFetcher(),
-        new PennyPriceFetcher(),
-    ];
+    /// <summary>
+    /// ReweePriceFetcher is the only adapter that depends on FlareSolverr (see FlareSolverrClient) - without
+    /// it, every store sync/price lookup would attempt and fail a Cloudflare-solve against an unreachable
+    /// FlareSolverr instance, so it's only included when FlareSolverr:Url is actually configured.
+    /// </summary>
+    internal static IChainPriceFetcher[] All(IHttpClientFactory httpClientFactory, bool flareSolverrConfigured)
+    {
+        List<IChainPriceFetcher> fetchers =
+        [
+            new KauflandPriceFetcher(httpClientFactory.CreateClient(nameof(KauflandPriceFetcher))),
+            new NettoPriceFetcher(),
+            new HitPriceFetcher(),
+            new EdekaPriceFetcher(),
+            new LidlPriceFetcher(),
+            new AldiPriceFetcher(),
+            new PennyPriceFetcher(),
+        ];
 
-    internal static Dictionary<string, IChainPriceFetcher> AllByBrand(IHttpClientFactory httpClientFactory) =>
-        All(httpClientFactory).ToDictionary(f => f.Brand);
+        if (flareSolverrConfigured)
+            fetchers.Add(new ReweePriceFetcher(
+                httpClientFactory.CreateClient(nameof(ReweePriceFetcher)),
+                new FlareSolverrClient(httpClientFactory.CreateClient("FlareSolverr"))));
+
+        return [.. fetchers];
+    }
+
+    internal static Dictionary<string, IChainPriceFetcher> AllByBrand(
+        IHttpClientFactory httpClientFactory, bool flareSolverrConfigured) =>
+        All(httpClientFactory, flareSolverrConfigured).ToDictionary(f => f.Brand);
 }

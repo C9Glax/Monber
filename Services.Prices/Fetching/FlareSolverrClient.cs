@@ -13,6 +13,13 @@ namespace Services.Prices.Fetching;
 /// (application/x-www-form-urlencoded) via browser navigation, not as a fetch/XHR with a chosen
 /// Content-Type - confirmed live against a request echo - so it cannot carry a JSON POST body.
 /// </summary>
+/// <summary>Whether a FlareSolverr instance is actually configured (FlareSolverr:Url set) for this deployment.</summary>
+internal static class FlareSolverrOptions
+{
+    internal static bool IsConfigured(IConfiguration configuration) =>
+        !string.IsNullOrWhiteSpace(configuration["FlareSolverr:Url"]);
+}
+
 internal sealed class FlareSolverrClient(HttpClient client)
 {
     public async Task<FlareSolverrSolution?> GetAsync(

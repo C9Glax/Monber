@@ -14,7 +14,7 @@ internal abstract class GetPricesByLocationEndpoint
     private const float Radius = 30;
 
     public static async Task<Ok<PriceObservation[]>> Handle(
-        Context ctx, IHttpClientFactory httpClientFactory,
+        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
         [FromQuery(Name = "lat")] float lat, [FromQuery(Name = "lon")] float lon,
         CancellationToken ct)
     {
@@ -46,7 +46,8 @@ internal abstract class GetPricesByLocationEndpoint
             .Where(s => externalIdsByStoreId.ContainsKey(s.Id))
             .Select(s => new PricedStore(s.Id, s.Brand, s.Name, s.Latitude, s.Longitude, externalIdsByStoreId[s.Id]))];
 
-        Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(httpClientFactory);
+        Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
+            httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
         PriceObservation[] result = await PriceLookup.GetPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, ct);
 
         return TypedResults.Ok(result);
