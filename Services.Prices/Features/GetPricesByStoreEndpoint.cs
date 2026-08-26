@@ -11,14 +11,15 @@ namespace Services.Prices.Features;
 internal abstract class GetPricesByStoreEndpoint
 {
     public static async Task<Results<Ok<PriceObservation[]>, NotFound>> Handle(
-        Context ctx, IHttpClientFactory httpClientFactory,
+        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
         [FromQuery(Name = "storeId")] long storeId, CancellationToken ct)
     {
         PricedStore? store = await PricedStore.Query(ctx, storeId: storeId).SingleOrDefaultAsync(ct);
         if (store is null)
             return TypedResults.NotFound();
 
-        Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(httpClientFactory);
+        Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
+            httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
         PriceObservation[] result = await PriceLookup.GetPricesAsync(ctx, fetchersByBrand, [store], TrackedProducts.All, ct);
 
         return TypedResults.Ok(result);
