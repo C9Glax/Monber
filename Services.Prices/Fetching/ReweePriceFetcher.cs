@@ -26,10 +26,11 @@ namespace Services.Prices.Fetching;
 /// HttpClient even with valid Cloudflare cookies replayed (confirmed live: same cookies, same request,
 /// curl/HttpClient get 403 while a real browser doesn't - almost certainly TLS/JA3 fingerprinting), so this
 /// one request per lookup goes through FlareSolverr itself rather than being replayed. REWE's catalog is
-/// far more granular than the tracked-product list
-/// (many sub-flavors, pack sizes, "Tiefpreis" labels), so a tracked product like "Monster Energy Ultra"
-/// matches the first tile whose name - with the "Monster Energy" prefix and pack-size suffix stripped -
-/// starts with the tracked flavor ("" for "Original", matching tiles with no extra flavor word at all).
+/// far more granular than the tracked-product list (many sub-flavors, pack sizes, "Tiefpreis" labels), but
+/// stores price every flavor of a given pack size identically, so tracked products are pack sizes, not
+/// flavors (e.g. "Monster Energy 10x0,5l"). A tracked product matches the first tile whose pack-size
+/// suffix - the trailing `10x0,5l`/`0,5l`-style token on the name - equals the tracked pack size, regardless
+/// of which flavor that tile is.
 /// </summary>
 internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrClient flareSolverr) : IChainPriceFetcher
 {
@@ -85,7 +86,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         if (html is null)
             return [];
 
-        (string Flavor, decimal Price)[] tiles = [.. ProductTileRegex().Matches(html)
+        (string PackSize, decimal Price)[] tiles = [.. ProductTileRegex().Matches(html)
             .Select(ParseTile)
             .Where(t => t is not null)
             .Select(t => t!.Value)];
@@ -93,16 +94,11 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         List<ChainPrice> results = [];
         foreach (string product in products)
         {
-            string flavor = product.Replace("Monster Energy", "", StringComparison.OrdinalIgnoreCase).Trim();
-            if (flavor.Equals("Original", StringComparison.OrdinalIgnoreCase))
-                flavor = ""; // REWE's plain-flavor tiles carry no flavor word at all.
+            string packSize = product.Replace("Monster Energy", "", StringComparison.OrdinalIgnoreCase).Trim();
 
-            foreach ((string tileFlavor, decimal price) in tiles)
+            foreach ((string tilePackSize, decimal price) in tiles)
             {
-                bool matches = flavor.Length == 0
-                    ? tileFlavor.Length == 0
-                    : tileFlavor.StartsWith(flavor, StringComparison.OrdinalIgnoreCase);
-                if (!matches)
+                if (!tilePackSize.Equals(packSize, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 results.Add(new ChainPrice(product, price, "EUR"));
@@ -201,7 +197,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         return true;
     }
 
-    private static (string Flavor, decimal Price)? ParseTile(Match match)
+    private static (string PackSize, decimal Price)? ParseTile(Match match)
     {
         if (!decimal.TryParse(
                 match.Groups["price"].Value, NumberStyles.Number, CultureInfo.GetCultureInfo("de-DE"), out decimal price))
@@ -211,9 +207,10 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
             .Replace("Monster Energy", "", StringComparison.OrdinalIgnoreCase)
             .Trim();
         Match sizeMatch = SizeSuffixRegex().Match(rest);
-        string flavor = sizeMatch.Success ? rest[..sizeMatch.Index].Trim() : rest;
+        if (!sizeMatch.Success)
+            return null;
 
-        return (flavor, price);
+        return (sizeMatch.Value, price);
     }
 
     [GeneratedRegex(@"aria-label=""(?<name>Monster Energy.+?),\s*(?:Tiefpreis\s+)?(?<price>\d+,\d+)\s*€""")]
