@@ -14,6 +14,10 @@ const savings = computed(() => {
   return `€${(props.areaAvg - props.best.low).toFixed(2)} under area average`
 })
 
+const priceLabel = computed(() => (props.best ? eur(props.best.low) : '--,--'))
+const storeLabel = computed(() => props.best?.brand ?? 'no data')
+const distLabel = computed(() => (props.best ? `${props.best.dist.toFixed(1)} km` : 'no data'))
+
 const glowStyle = computed(() => ({
   position: 'absolute' as const,
   inset: 0,
@@ -29,7 +33,7 @@ const glowStyle = computed(() => ({
     <div :style="glowStyle" aria-hidden="true" />
     <div class="kicker">Cheapest can near you</div>
     <div class="price-row">
-      <div class="price">{{ eur(best?.low ?? null) }}</div>
+      <div class="price">{{ priceLabel }}</div>
       <div class="price-meta">
         <div class="per-can">per 500&nbsp;ml can</div>
         <div class="pack">{{ best?.pack ?? '' }}</div>
@@ -37,9 +41,9 @@ const glowStyle = computed(() => ({
     </div>
     <div class="store-row">
       <a v-if="best?.sourceUrl" class="store-name store-link" :href="best.sourceUrl" target="_blank" rel="noopener noreferrer">{{ best.brand }}</a>
-      <span v-else class="store-name">{{ best?.brand ?? '—' }}</span>
+      <span v-else class="store-name">{{ storeLabel }}</span>
       <span class="store-meta">
-        <template v-if="best">{{ best.dist.toFixed(1) }} km<template v-if="best.name"> · {{ best.name }}</template></template>
+        {{ distLabel }}<template v-if="best?.name"> · {{ best.name }}</template>
       </span>
     </div>
     <div class="tags-row">

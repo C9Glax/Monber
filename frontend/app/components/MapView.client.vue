@@ -31,16 +31,19 @@ async function paintMarkers(refit: boolean) {
 
   for (const store of props.stores) {
     const isBest = best && store.id === best.id
+    const isSelected = store.id === selectedId
     const style = isBest
       ? 'background:var(--color-accent-400);border-color:var(--color-accent-400);color:#161826;font-weight:600;'
       : 'border-color:var(--color-neutral-700);color:var(--color-accent-300);'
+    const pinClass = ['mb-pin', isBest && 'best', isSelected && 'selected'].filter(Boolean).join(' ')
 
     const marker = L.marker([store.lat, store.lon], {
+      zIndexOffset: isSelected ? 500 : 0,
       icon: L.divIcon({
         className: '',
         iconSize: [48, 22],
         iconAnchor: [24, 11],
-        html: `<div class="mb-pin${isBest ? ' best' : ''}" style="${style}">${eur(store.low)}</div>`,
+        html: `<div class="${pinClass}" style="${style}">${eur(store.low)}</div>`,
       }),
     })
     marker.bindPopup(
@@ -107,11 +110,15 @@ function fitToRange() {
   if (view) programmaticSetView(view.center, view.zoom, { animate: false })
 }
 
-function focus(store: { lat: number, lon: number }) {
+let selectedId: number | null = null
+
+function focus(store: { id?: number, lat: number, lon: number }) {
   // An explicit "show on map" / store click is itself a deliberate view change - treat it like
   // manual interaction so a later radius tweak doesn't yank the view away from what was asked for.
   userInteracted = true
+  selectedId = store.id ?? null
   programmaticSetView([store.lat, store.lon], 15, { animate: true })
+  paintMarkers(false)
 }
 
 defineExpose({ focus })
@@ -174,10 +181,17 @@ onMounted(async () => {
     fillOpacity: 0.05,
     interactive: false,
   }).addTo(map)
+  // Not interactive: this marker is small and often sits right on top of (or very near) a
+  // store's price pin - being interactive with a high z-index meant it silently swallowed
+  // clicks meant for the store marker underneath, so "click a marker" would show "You are
+  // here" instead of the store's price even though the store pin was what was visually
+  // clicked. The accent-colored dot plus the "Your location"/address label elsewhere already
+  // communicate the user's position without needing its own click target.
   meMarker = L.marker([props.lat, props.lon], {
-    zIndexOffset: 1000,
+    zIndexOffset: 400,
+    interactive: false,
     icon: L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="mb-me"></div>' }),
-  }).addTo(map).bindPopup('You are here')
+  }).addTo(map)
 
   paintMarkers(false)
 })

@@ -60,17 +60,6 @@ function onSearch() {
         >
           {{ preset }} km
         </button>
-      </div>
-      <div class="slider-row">
-        <input
-          type="range"
-          min="1"
-          :max="radiusMax"
-          step="1"
-          :value="radiusKm"
-          aria-label="Search radius"
-          @input="onSliderInput"
-        >
         <span class="radius-input">
           <input
             type="number"
@@ -83,6 +72,17 @@ function onSearch() {
           >
           <span class="unit">km</span>
         </span>
+      </div>
+      <div class="slider-row">
+        <input
+          type="range"
+          min="1"
+          :max="radiusMax"
+          step="1"
+          :value="radiusKm"
+          aria-label="Search radius"
+          @input="onSliderInput"
+        >
       </div>
     </div>
     <span class="divider" />
@@ -165,10 +165,9 @@ function onSearch() {
 .slider-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
 }
 .slider-row input[type='range'] {
-  width: 108px;
+  width: 100%;
   accent-color: var(--color-accent);
 }
 .radius-input {
@@ -180,13 +179,22 @@ function onSearch() {
   border-radius: var(--radius-sm);
 }
 .radius-input input {
-  width: 40px;
+  width: 24px;
   background: transparent;
   border: 0;
   color: var(--color-text);
   font-family: var(--font-heading);
   font-size: 13px;
   padding: 0;
+}
+.radius-input input[type='number']::-webkit-outer-spin-button,
+.radius-input input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.radius-input input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 .radius-input .unit {
   font-size: 11px;
