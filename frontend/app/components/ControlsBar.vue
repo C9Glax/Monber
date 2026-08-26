@@ -5,11 +5,15 @@ const props = defineProps<{
   radiusMax: number
   radiusPresets: number[]
   locating: boolean
+  geocoding: boolean
+  geocodeError: string | null
 }>()
 
 const emit = defineEmits<{
   'update:radiusKm': [value: number]
+  'update:placeLabel': [value: string]
   locate: []
+  search: [query: string]
 }>()
 
 function setRadius(v: number | string) {
@@ -20,48 +24,66 @@ function setRadius(v: number | string) {
 function onSliderInput(e: Event) {
   setRadius((e.target as HTMLInputElement).value)
 }
+
+function onPlaceInput(e: Event) {
+  emit('update:placeLabel', (e.target as HTMLInputElement).value)
+}
+
+function onSearch() {
+  emit('search', props.placeLabel)
+}
 </script>
 
 <template>
   <div class="controls-bar">
-    <span class="place">
-      <i class="ph ph-map-pin" style="color: var(--color-accent);" />{{ placeLabel }}
-    </span>
-    <span class="divider" />
-    <div class="presets">
-      <button
-        v-for="preset in radiusPresets"
-        :key="preset"
-        class="btn preset-btn"
-        :class="preset === radiusKm ? 'preset-active' : 'btn-ghost'"
-        @click="setRadius(preset)"
-      >
-        {{ preset }} km
-      </button>
-    </div>
-    <span class="divider" />
-    <div class="slider-group">
+    <form class="place-search" @submit.prevent="onSearch">
+      <i class="ph ph-map-pin" style="color: var(--color-accent);" />
       <input
-        type="range"
-        min="1"
-        :max="radiusMax"
-        step="1"
-        :value="radiusKm"
-        aria-label="Search radius"
-        @input="onSliderInput"
+        type="text"
+        :value="placeLabel"
+        placeholder="Search address…"
+        :disabled="geocoding"
+        aria-label="Search address"
+        @input="onPlaceInput"
       >
-      <span class="radius-input">
+    </form>
+    <span v-if="geocodeError" class="geocode-error">{{ geocodeError }}</span>
+    <span class="divider" />
+    <div class="radius-group">
+      <div class="presets">
+        <button
+          v-for="preset in radiusPresets"
+          :key="preset"
+          class="btn preset-btn"
+          :class="preset === radiusKm ? 'preset-active' : 'btn-ghost'"
+          @click="setRadius(preset)"
+        >
+          {{ preset }} km
+        </button>
+      </div>
+      <div class="slider-row">
         <input
-          type="number"
+          type="range"
           min="1"
           :max="radiusMax"
           step="1"
           :value="radiusKm"
-          aria-label="Search radius in kilometres"
+          aria-label="Search radius"
           @input="onSliderInput"
         >
-        <span class="unit">km</span>
-      </span>
+        <span class="radius-input">
+          <input
+            type="number"
+            min="1"
+            :max="radiusMax"
+            step="1"
+            :value="radiusKm"
+            aria-label="Search radius in kilometres"
+            @input="onSliderInput"
+          >
+          <span class="unit">km</span>
+        </span>
+      </div>
     </div>
     <span class="divider" />
     <button class="btn btn-ghost" :disabled="locating" @click="emit('locate')">
@@ -88,7 +110,7 @@ function onSliderInput(e: Event) {
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-md);
 }
-.place {
+.place-search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -96,14 +118,38 @@ function onSliderInput(e: Event) {
   white-space: nowrap;
   color: var(--color-neutral-300);
 }
+.place-search input {
+  width: 160px;
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  padding: 0;
+}
+.place-search input::placeholder {
+  color: var(--color-neutral-500);
+}
+.geocode-error {
+  font-size: 11px;
+  color: var(--color-accent-300);
+  white-space: nowrap;
+}
 .divider {
   width: 1px;
   height: 20px;
   background: var(--color-neutral-800);
 }
+.radius-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
 .presets {
   display: flex;
   gap: 2px;
+  justify-content: center;
 }
 .preset-btn {
   font-size: 12px;
@@ -116,12 +162,12 @@ function onSliderInput(e: Event) {
   background: color-mix(in srgb, var(--color-accent-800) 70%, transparent);
   color: var(--color-accent-200);
 }
-.slider-group {
+.slider-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
-.slider-group input[type='range'] {
+.slider-row input[type='range'] {
   width: 108px;
   accent-color: var(--color-accent);
 }

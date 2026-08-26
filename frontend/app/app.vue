@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { MAX_RADIUS_KM } from './composables/useStorePrices'
 import { poiStoresUrl, pricesUrl } from './composables/useMonberApi'
+import { geocodeAddress } from './composables/useGeocoding'
 
-const RADIUS_PRESETS = [5, 10, 20, 30]
+const RADIUS_PRESETS = [1, 2, 5]
 
 const lat = ref(52.5200)
 const lon = ref(13.4050)
 const placeLabel = ref('Berlin Mitte, DE')
-const radiusKm = ref(10)
+const radiusKm = ref(5)
 const locating = ref(false)
+const geocoding = ref(false)
+const geocodeError = ref<string | null>(null)
 
 const { loading, error, refresh, inRange, inRangeFuture, unpricedInRange } = useStorePrices()
 
@@ -47,6 +50,28 @@ function onMapLocationClick(clickLat: number, clickLon: number) {
   placeLabel.value = 'Custom location'
 }
 
+async function searchAddress(query: string) {
+  geocoding.value = true
+  geocodeError.value = null
+  try {
+    const result = await geocodeAddress(query)
+    if (result) {
+      lat.value = result.lat
+      lon.value = result.lon
+      placeLabel.value = result.label
+    }
+    else {
+      geocodeError.value = 'Address not found'
+    }
+  }
+  catch {
+    geocodeError.value = 'Could not reach the geocoding service'
+  }
+  finally {
+    geocoding.value = false
+  }
+}
+
 function locate() {
   if (!navigator.geolocation) return
   locating.value = true
@@ -82,12 +107,15 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
       <BrandBar />
 
       <ControlsBar
-        :place-label="placeLabel"
+        v-model:place-label="placeLabel"
         v-model:radius-km="radiusKm"
         :radius-max="MAX_RADIUS_KM"
         :radius-presets="RADIUS_PRESETS"
         :locating="locating"
+        :geocoding="geocoding"
+        :geocode-error="geocodeError"
         @locate="locate"
+        @search="searchAddress"
       />
 
       <div class="sidebar">
