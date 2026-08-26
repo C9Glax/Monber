@@ -25,6 +25,11 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       apiBase: '',
+      // MapTiler API key for the basemap tiles (see MapView.client.vue). Set via
+      // NUXT_PUBLIC_MAP_TILER_KEY (Nuxt maps camelCase runtimeConfig keys to env vars by
+      // splitting on capitals) - injected by Aspire from MonberAPI.AppHost/MAPTILER_API.key
+      // when run through the AppHost. Falls back to plain OSM tiles if unset.
+      mapTilerKey: '',
     },
   },
 

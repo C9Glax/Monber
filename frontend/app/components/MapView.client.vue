@@ -94,11 +94,22 @@ onMounted(async () => {
 
   map = L.map(mapEl.value, { zoomControl: false, attributionControl: true }).setView([props.lat, props.lon], 12)
   L.control.zoom({ position: 'bottomright' }).addTo(map)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap · © CARTO',
-    maxZoom: 19,
-    subdomains: 'abcd',
-  }).addTo(map)
+
+  const mapTilerKey = useRuntimeConfig().public.mapTilerKey
+  if (mapTilerKey) {
+    L.tileLayer(`https://api.maptiler.com/maps/dataviz-dark/256/{z}/{x}/{y}{r}.png?key=${mapTilerKey}`, {
+      attribution: '© OpenStreetMap · © MapTiler',
+      maxZoom: 19,
+      detectRetina: true,
+    }).addTo(map)
+  }
+  else {
+    // No MapTiler key configured - fall back to plain (light) OSM tiles rather than a broken map.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map)
+  }
 
   markerLayer = L.layerGroup().addTo(map)
 
