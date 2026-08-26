@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Services.Prices.Database;
 using Services.Prices.Entities;
 using Services.Prices.Extensions;
@@ -15,7 +16,7 @@ internal static class PriceLookup
 {
     internal static async Task<PriceObservation[]> GetPricesAsync(
         Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
-        PricedStore[] stores, string[] products, CancellationToken ct)
+        PricedStore[] stores, string[] products, ILogger logger, CancellationToken ct)
     {
         DateOnly today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
         List<PriceObservation> results = [];
@@ -34,6 +35,9 @@ internal static class PriceLookup
             if (stale.Length > 0 && fetchersByBrand.TryGetValue(store.Brand, out IChainPriceFetcher? fetcher))
             {
                 ChainStore chainStore = new(store.ExternalStoreId, store.Name, store.Latitude, store.Longitude);
+                logger.LogInformation(
+                    "Fetching live prices for {Brand} store {StoreId} ({StaleCount} stale products)",
+                    store.Brand, store.StoreId, stale.Length);
                 try
                 {
                     ChainPrice[] live = await fetcher.FetchPricesAsync(chainStore, stale, ct);
@@ -45,10 +49,17 @@ internal static class PriceLookup
                         await ctx.SaveChangesAsync(ct);
                         existing = [.. existing, .. ctx.Prices.Local.Where(p => p.StoreId == store.StoreId && live.Any(l => l.Product == p.Product))];
                     }
+
+                    logger.LogInformation(
+                        "Fetched {Count} live prices for {Brand} store {StoreId}",
+                        live.Length, store.Brand, store.StoreId);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // Fall through and serve whatever was already cached for this store.
+                    logger.LogWarning(ex,
+                        "Live price fetch failed for {Brand} store {StoreId}; serving cached prices instead",
+                        store.Brand, store.StoreId);
                 }
             }
 
