@@ -5,6 +5,11 @@ export default defineNuxtConfig({
   ssr: false,
 
   css: [
+    // Leaflet's own base stylesheet - required for correct tile positioning (it takes tiles
+    // out of normal document flow via `position: absolute`); without it, the JS-set transform
+    // positioning is relative to each tile's normal-flow position instead of a clean origin,
+    // which is exactly what causes tiles to render visibly misaligned.
+    'leaflet/dist/leaflet.css',
     '@phosphor-icons/web/regular/style.css',
     '~/assets/css/main.css',
   ],
