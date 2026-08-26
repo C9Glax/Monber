@@ -7,4 +7,5 @@ internal record DbPriceObservation(
     decimal Price,
     string Currency,
     DateTimeOffset FetchedAt,
-    DateOnly? EffectiveFrom = null);
+    DateOnly? EffectiveFrom = null,
+    string? SourceUrl = null);

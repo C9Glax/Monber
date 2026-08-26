@@ -23,6 +23,7 @@ internal static class DbToDto
         observation.Price,
         observation.Currency,
         observation.FetchedAt,
-        observation.EffectiveFrom
+        observation.EffectiveFrom,
+        observation.SourceUrl
     );
 }

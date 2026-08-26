@@ -108,14 +108,14 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
                 {
                     if (foundFuture)
                         continue;
-                    results.Add(new ChainPrice(product, price, "EUR", start));
+                    results.Add(new ChainPrice(product, price, "EUR", start, searchUrl));
                     foundFuture = true;
                 }
                 else
                 {
                     if (foundCurrent)
                         continue;
-                    results.Add(new ChainPrice(product, price, "EUR"));
+                    results.Add(new ChainPrice(product, price, "EUR", SourceUrl: searchUrl));
                     foundCurrent = true;
                 }
             }

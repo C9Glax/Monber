@@ -26,7 +26,8 @@ const startsLabel = computed(() => {
       </div>
     </div>
     <div class="store-row">
-      <span class="store-name">{{ best.brand }}</span>
+      <a v-if="best.sourceUrl" class="store-name store-link" :href="best.sourceUrl" target="_blank" rel="noopener noreferrer">{{ best.brand }}</a>
+      <span v-else class="store-name">{{ best.brand }}</span>
       <span class="store-meta">{{ best.dist.toFixed(1) }} km<template v-if="best.name"> · {{ best.name }}</template></span>
     </div>
     <div class="tags-row">
@@ -91,6 +92,13 @@ const startsLabel = computed(() => {
 .store-name {
   font-family: var(--font-heading);
   font-size: 17px;
+}
+.store-link {
+  color: inherit;
+  text-decoration: none;
+}
+.store-link:hover {
+  text-decoration: underline;
 }
 .store-meta {
   font-size: 12px;

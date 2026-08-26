@@ -23,4 +23,4 @@ internal record ChainStore(string ExternalStoreId, string? Name, double? Latitud
 /// future date when the fetcher found a price that only becomes effective then (e.g. an upcoming
 /// flyer/sale that hasn't started yet) - see KauflandPriceFetcher.
 /// </summary>
-internal record ChainPrice(string Product, decimal Price, string Currency, DateOnly? EffectiveFrom = null);
+internal record ChainPrice(string Product, decimal Price, string Currency, DateOnly? EffectiveFrom = null, string? SourceUrl = null);
