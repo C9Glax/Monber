@@ -4,6 +4,11 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- Pure reverse proxy: the UI is served by the frontend resource and proxied
+             through, so this project serves no static assets of its own and needs no
+             wwwroot. Without this, the Sdk.Web static web assets loader requires
+             wwwroot to exist at startup even though nothing uses it. -->
+        <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     </PropertyGroup>
 
     <ItemGroup>

@@ -26,13 +26,22 @@ internal static class OverpassDataFetcher
 
     private static readonly HttpClient Client = new()
     {
+        // HttpClient's own default (100s) is shorter than the query's own [timeout:120] budget,
+        // so a genuinely slow-but-successful response could still get aborted client-side first.
+        Timeout = TimeSpan.FromSeconds(TimeoutSeconds + 30),
         DefaultRequestHeaders =
         {
             UserAgent = { new("Monber", "0.1")}
         }
     };
 
-    private const string BaseQuery = "data=[out:json][timeout:{0}];area(id:3600051477)->.searchArea;({1});out geom;";
+    // "out center;" (not "out geom;"): for node elements Overpass still puts lat/lon at the top
+    // level, but for way/relation elements - most mapped supermarkets, since many are mapped as
+    // building outlines rather than a single point - "out geom;" only gives a bounds/geometry
+    // array, no top-level lat/lon, which silently produced Latitude=0/Longitude=0 (missing
+    // ~58% of matched stores, everything mapped as a way or relation). "center" adds a
+    // {lat, lon} centroid for those instead - see Store.ResolvedLatitude/ResolvedLongitude.
+    private const string BaseQuery = "data=[out:json][timeout:{0}];area(id:3600051477)->.searchArea;({1});out center;";
 
     private const string StoreQuery = """nwr["shop"]["brand"="{0}"](area.searchArea);""";
 
@@ -80,7 +89,7 @@ internal static class OverpassDataFetcher
         {
             return;
         }
-        DbStore[] dbStores = [.. stores.Where(s => s.Latitude != 0 && s.Longitude != 0).Select(s => s.ToDbStore())];
+        DbStore[] dbStores = [.. stores.Where(s => s.ResolvedLatitude != 0 && s.ResolvedLongitude != 0).Select(s => s.ToDbStore())];
 
         long[] storeIds = dbStores.Select(s => s.Id).ToArray();
         await context.Stores.Where(s => storeIds.All(id => id != s.Id)).ExecuteDeleteAsync(ct);
@@ -108,9 +117,22 @@ internal static class OverpassDataFetcher
     [method: JsonConstructor]
     internal record Store(
         [property: JsonPropertyName("id")] long Id,
-        [property: JsonPropertyName("lat")] double Latitude,
-        [property: JsonPropertyName("lon")] double Longitude,
-        [property: JsonPropertyName("tags")] StoreInfo StoreInfo);
+        [property: JsonPropertyName("lat")] double? Latitude,
+        [property: JsonPropertyName("lon")] double? Longitude,
+        [property: JsonPropertyName("center")] CenterStruct? Center,
+        [property: JsonPropertyName("tags")] StoreInfo StoreInfo)
+    {
+        // Node elements have lat/lon directly; way/relation elements (most mapped supermarkets,
+        // since many are mapped as building outlines) only have a "center" centroid instead - see
+        // the "out center;" comment on BaseQuery above.
+        internal double ResolvedLatitude => Latitude ?? Center?.Lat ?? 0;
+        internal double ResolvedLongitude => Longitude ?? Center?.Lon ?? 0;
+    }
+
+    [method: JsonConstructor]
+    internal record CenterStruct(
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon);
 
     [method: JsonConstructor]
     internal record StoreInfo(
