@@ -20,9 +20,6 @@ WebApplication app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
 app.UseCors(FrontendCorsPolicy);
 
 app.MapReverseProxy();

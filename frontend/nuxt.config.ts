@@ -18,9 +18,13 @@ export default defineNuxtConfig({
     },
   },
 
+  // Empty by default: the app is served through MonberAPI.Gateway, which also proxies
+  // /poi and /prices on the same origin, so relative URLs just work. Override with
+  // NUXT_PUBLIC_API_BASE (e.g. http://localhost:5090) only when running the frontend
+  // standalone against a gateway on a different origin (see AllowedOrigins CORS config).
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:5090',
+      apiBase: '',
     },
   },
 

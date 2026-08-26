@@ -6,15 +6,15 @@ IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI
 
 IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_Prices>("services-prices");
 
-IResourceBuilder<ProjectResource> gateway = builder.AddProject<Projects.MonberAPI_Gateway>("gateway")
+var frontend = builder.AddNpmApp("frontend", "../frontend", "dev")
+    .WithHttpEndpoint(env: "PORT", targetPort: 3000);
+
+// The gateway is the single external entry point: it serves the UI (proxied through to the
+// frontend dev server) and the /poi and /prices APIs, all on one origin.
+builder.AddProject<Projects.MonberAPI_Gateway>("gateway")
     .WithReference(poi)
     .WithReference(prices)
-    .WithExternalHttpEndpoints();
-
-builder.AddNpmApp("frontend", "../frontend", "dev")
-    .WithReference(gateway)
-    .WithEnvironment("NUXT_PUBLIC_API_BASE", gateway.GetEndpoint("http"))
-    .WithHttpEndpoint(env: "PORT", targetPort: 3000)
+    .WithReference(frontend)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();
