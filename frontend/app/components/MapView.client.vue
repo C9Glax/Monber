@@ -97,10 +97,15 @@ onMounted(async () => {
 
   const mapTilerKey = useRuntimeConfig().public.mapTilerKey
   if (mapTilerKey) {
+    // Leaflet's `{r}` placeholder already resolves to "@2x" on retina displays independent of
+    // any option, matching MapTiler's real @2x tiles at the same zoom/tile size. Do NOT also
+    // set detectRetina: true - that's a *different* mechanism (for providers without real @2x
+    // tiles) that fetches regular tiles one zoom level deeper and halves their displayed size;
+    // combined with real @2x tiles it double-compensates, squeezing 512px images into 128px
+    // boxes at the wrong zoom level, which is what caused the misaligned/blurry tile seams.
     L.tileLayer(`https://api.maptiler.com/maps/dataviz-dark/256/{z}/{x}/{y}{r}.png?key=${mapTilerKey}`, {
       attribution: '© OpenStreetMap · © MapTiler',
       maxZoom: 19,
-      detectRetina: true,
     }).addTo(map)
   }
   else {
