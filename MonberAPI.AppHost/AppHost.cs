@@ -17,9 +17,17 @@ string mapTilerApiKey = File.Exists(mapTilerKeyFile)
     ? File.ReadAllText(mapTilerKeyFile).Trim()
     : builder.Configuration["Parameters:maptiler-api-key"] ?? "";
 
+// npm run dev requires node_modules to already be present, so install dependencies first and
+// have the dev server wait for that to finish rather than failing on a fresh checkout.
+IResourceBuilder<ExecutableResource> frontendInstall = builder.AddExecutable("frontend-npm-install", "npm", "../frontend", "install")
+    .ExcludeFromManifest();
+
 var frontend = builder.AddNpmApp("frontend", "../frontend", "dev")
+    .WaitForCompletion(frontendInstall)
     .WithHttpEndpoint(env: "PORT", targetPort: 3000)
     .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
+
+frontendInstall.WithParentRelationship(frontend);
 
 // The gateway is the single external entry point: it serves the UI (proxied through to the
 // frontend dev server) and the /poi and /prices APIs, all on one origin.
