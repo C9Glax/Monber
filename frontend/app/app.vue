@@ -12,12 +12,13 @@ const radiusKm = ref(10)
 const selectedVariant = ref<VariantDef['key'] | null>(null)
 const locating = ref(false)
 
-const { loading, error, refresh, inRange } = useStorePrices()
+const { loading, error, refresh, inRange, unpricedInRange } = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
 
 const rangeStores = computed(() => inRange(radiusKm.value, selectedVariant.value))
 const allRangeStores = computed(() => inRange(radiusKm.value, null))
+const unpricedStores = computed(() => unpricedInRange(radiusKm.value))
 
 const best = computed(() => rangeStores.value[0] ?? null)
 const areaAvg = computed(() => {
@@ -70,6 +71,7 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
       :lon="lon"
       :radius-km="radiusKm"
       :stores="rangeStores"
+      :unpriced-stores="unpricedStores"
       @location-click="onMapLocationClick"
     />
 

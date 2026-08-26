@@ -70,8 +70,10 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
 
   const merged: MergedStore[] = []
   for (const store of pois) {
-    const obs = byStore.get(store.id)
-    if (!obs || obs.length === 0) continue
+    // Includes stores with no price observations at all (no StoreExternalIds mapping yet, or
+    // never fetched) - they still get a MergedStore, just with every price null, so the map can
+    // show them as plain "no price data" markers rather than only ever showing priced stores.
+    const obs = byStore.get(store.id) ?? []
 
     const prices: VariantPrices = { orig: null, ultra: null, mango: null }
     let latestFetchedAt: string | null = null
@@ -156,5 +158,10 @@ export function useStorePrices() {
     return out.sort((a, b) => a.low - b.low || a.dist - b.dist)
   }
 
-  return { pois, observations, loading, error, merged, refresh, inRange }
+  /** Stores within `radiusKm` that have no price data for any variant. */
+  function unpricedInRange(radiusKm: number): MergedStore[] {
+    return merged.value.filter((store) => store.dist <= radiusKm && VARIANTS.every((v) => store.prices[v.key] == null))
+  }
+
+  return { pois, observations, loading, error, merged, refresh, inRange, unpricedInRange }
 }

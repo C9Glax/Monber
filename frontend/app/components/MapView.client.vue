@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Map as LeafletMap, LayerGroup, Circle, Marker, LatLng } from 'leaflet'
-import type { RangedStore } from '../composables/useStorePrices'
+import type { MergedStore, RangedStore } from '../composables/useStorePrices'
 import { eur } from '../composables/useStorePrices'
 
 const props = defineProps<{
@@ -8,6 +8,7 @@ const props = defineProps<{
   lon: number
   radiusKm: number
   stores: RangedStore[]
+  unpricedStores: MergedStore[]
 }>()
 
 const emit = defineEmits<{ locationClick: [lat: number, lon: number] }>()
@@ -53,6 +54,15 @@ async function paintMarkers(refit: boolean) {
     marker.bindPopup(
       `<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>${eur(store.low)} · ${store.lowVariant.name} · ${store.dist.toFixed(1)} km`,
     )
+    marker.addTo(markerLayer)
+  }
+
+  for (const store of props.unpricedStores) {
+    const marker = L.marker([store.lat, store.lon], {
+      zIndexOffset: -1000,
+      icon: L.divIcon({ className: '', iconSize: [9, 9], iconAnchor: [4, 4], html: '<div class="mb-empty"></div>' }),
+    })
+    marker.bindPopup(`<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>No price data yet`)
     marker.addTo(markerLayer)
   }
 
@@ -189,7 +199,13 @@ let lastLatLon = ''
 let lastFitKey = ''
 let repaintTimer: ReturnType<typeof setTimeout> | null = null
 watch(
-  () => [props.lat, props.lon, props.radiusKm, props.stores.map((s) => s.id).join(',')],
+  () => [
+    props.lat,
+    props.lon,
+    props.radiusKm,
+    props.stores.map((s) => s.id).join(','),
+    props.unpricedStores.map((s) => s.id).join(','),
+  ],
   () => {
     // Debounced: the radius slider/number input fires on every tick while dragging, and each
     // call here can trigger map.setView() via fitToRange(). Calling setView in a rapid burst -
