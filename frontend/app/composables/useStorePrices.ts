@@ -29,6 +29,8 @@ export interface MergedStore {
   /** Which pack size produced `perCanPrice`, for display only - not a selectable filter. */
   pack: string | null
   latestFetchedAt: string | null
+  /** Set when `perCanPrice` comes from a future/upcoming price (see PriceObservation.effectiveFrom). */
+  effectiveFrom: string | null
 }
 
 export interface RangedStore extends MergedStore {
@@ -60,9 +62,19 @@ export function ago(iso: string | null): string {
   return `${Math.round(hours / 24)} d ago`
 }
 
-function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat: number, userLon: number): MergedStore[] {
+/**
+ * @param wantFuture When false (default), only considers current-price observations
+ * (`effectiveFrom == null`) - the store's price as observed today. When true, only considers
+ * upcoming ones (`effectiveFrom` set), e.g. a sale that hasn't started yet - see
+ * PriceObservation.effectiveFrom and KauflandPriceFetcher on the backend.
+ */
+function mergeStores(
+  pois: PoiStore[], observations: PriceObservation[], userLat: number, userLon: number, wantFuture = false,
+): MergedStore[] {
+  const relevant = observations.filter((o) => (o.effectiveFrom != null) === wantFuture)
+
   const byStore = new Map<number, PriceObservation[]>()
-  for (const obs of observations) {
+  for (const obs of relevant) {
     const list = byStore.get(obs.storeId)
     if (list) list.push(obs)
     else byStore.set(obs.storeId, [obs])
@@ -78,6 +90,7 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
     let perCanPrice: number | null = null
     let pack: string | null = null
     let latestFetchedAt: string | null = null
+    let effectiveFrom: string | null = null
     for (const packDef of PACKS) {
       const match = obs.find((o) => o.product === packDef.product)
       if (!match) continue
@@ -86,6 +99,7 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
       if (perCanPrice == null || canPrice < perCanPrice) {
         perCanPrice = canPrice
         pack = packDef.label
+        effectiveFrom = match.effectiveFrom
       }
       if (!latestFetchedAt || new Date(match.fetchedAt) > new Date(latestFetchedAt)) {
         latestFetchedAt = match.fetchedAt
@@ -103,6 +117,7 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
       perCanPrice,
       pack,
       latestFetchedAt,
+      effectiveFrom,
     })
   }
 
@@ -141,14 +156,29 @@ export function useStorePrices() {
     return mergeStores(pois.value, observations.value, lastQuery.value.lat, lastQuery.value.lon)
   })
 
-  /** Stores within `radiusKm` with a per-can price, sorted lowest-first. */
-  function inRange(radiusKm: number): RangedStore[] {
+  /** Same as `merged`, but built only from upcoming/future prices (see PriceObservation.effectiveFrom). */
+  const mergedFuture = computed(() => {
+    if (!lastQuery.value) return []
+    return mergeStores(pois.value, observations.value, lastQuery.value.lat, lastQuery.value.lon, true)
+  })
+
+  function rangeFrom(source: MergedStore[], radiusKm: number): RangedStore[] {
     const out: RangedStore[] = []
-    for (const store of merged.value) {
+    for (const store of source) {
       if (store.dist > radiusKm || store.perCanPrice == null) continue
       out.push({ ...store, low: store.perCanPrice })
     }
     return out.sort((a, b) => a.low - b.low || a.dist - b.dist)
+  }
+
+  /** Stores within `radiusKm` with a per-can price, sorted lowest-first. */
+  function inRange(radiusKm: number): RangedStore[] {
+    return rangeFrom(merged.value, radiusKm)
+  }
+
+  /** Same as `inRange`, but for upcoming/future prices only. */
+  function inRangeFuture(radiusKm: number): RangedStore[] {
+    return rangeFrom(mergedFuture.value, radiusKm)
   }
 
   /** Stores within `radiusKm` that have no price data for any pack size. */
@@ -156,5 +186,5 @@ export function useStorePrices() {
     return merged.value.filter((store) => store.dist <= radiusKm && store.perCanPrice == null)
   }
 
-  return { pois, observations, loading, error, merged, refresh, inRange, unpricedInRange }
+  return { pois, observations, loading, error, merged, refresh, inRange, inRangeFuture, unpricedInRange }
 }

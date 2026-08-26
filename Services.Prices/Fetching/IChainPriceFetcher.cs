@@ -18,4 +18,9 @@ internal interface IChainPriceFetcher
 
 internal record ChainStore(string ExternalStoreId, string? Name, double? Latitude, double? Longitude);
 
-internal record ChainPrice(string Product, decimal Price, string Currency);
+/// <summary>
+/// <paramref name="EffectiveFrom"/> is null for a price observed as currently in effect, or set to a
+/// future date when the fetcher found a price that only becomes effective then (e.g. an upcoming
+/// flyer/sale that hasn't started yet) - see KauflandPriceFetcher.
+/// </summary>
+internal record ChainPrice(string Product, decimal Price, string Currency, DateOnly? EffectiveFrom = null);

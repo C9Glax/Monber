@@ -10,14 +10,16 @@ const placeLabel = ref('Berlin Mitte, DE')
 const radiusKm = ref(10)
 const locating = ref(false)
 
-const { loading, error, refresh, inRange, unpricedInRange } = useStorePrices()
+const { loading, error, refresh, inRange, inRangeFuture, unpricedInRange } = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
 
 const rangeStores = computed(() => inRange(radiusKm.value))
+const futureRangeStores = computed(() => inRangeFuture(radiusKm.value))
 const unpricedStores = computed(() => unpricedInRange(radiusKm.value))
 
 const best = computed(() => rangeStores.value[0] ?? null)
+const futureBest = computed(() => futureRangeStores.value[0] ?? null)
 const areaAvg = computed(() => {
   const lows = rangeStores.value.map((s) => s.low)
   if (lows.length === 0) return null
@@ -29,6 +31,10 @@ const pricesApiUrl = computed(() => pricesUrl(lat.value, lon.value))
 
 function showBestOnMap() {
   if (best.value) mapView.value?.focus(best.value)
+}
+
+function showFutureBestOnMap() {
+  if (futureBest.value) mapView.value?.focus(futureBest.value)
 }
 
 function selectStore(store: { lat: number, lon: number }) {
@@ -89,6 +95,7 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
         <div v-else-if="loading" class="loading-card">Loading nearby stores…</div>
         <template v-else>
           <CheapestCard :best="best" :area-avg="areaAvg" @show="showBestOnMap" />
+          <FutureLowestCard :best="futureBest" @show="showFutureBestOnMap" />
           <StoreList :rows="rangeStores" :area-avg="areaAvg" @select="selectStore" />
         </template>
 

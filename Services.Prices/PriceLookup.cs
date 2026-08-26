@@ -38,7 +38,7 @@ internal static class PriceLookup
                 {
                     ChainPrice[] live = await fetcher.FetchPricesAsync(chainStore, stale, ct);
                     foreach (ChainPrice price in live)
-                        ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow));
+                        ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow, price.EffectiveFrom));
 
                     if (live.Length > 0)
                     {
@@ -53,7 +53,9 @@ internal static class PriceLookup
             }
 
             results.AddRange(existing
-                .GroupBy(p => p.Product)
+                // Group by (Product, EffectiveFrom), not just Product - a current and a future price for
+                // the same product are both valid, distinct rows and must not collapse into one.
+                .GroupBy(p => (p.Product, p.EffectiveFrom))
                 .Select(g => g.OrderByDescending(p => p.FetchedAt).First().ToDto(store)));
         }
 
