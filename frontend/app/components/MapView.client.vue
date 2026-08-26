@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Map as LeafletMap, LayerGroup, Circle, Marker } from 'leaflet'
+import type { Map as LeafletMap, LayerGroup, Circle, Marker, LatLng } from 'leaflet'
 import type { RangedStore } from '../composables/useStorePrices'
 import { eur } from '../composables/useStorePrices'
 
@@ -57,8 +57,9 @@ async function paintMarkers(refit: boolean) {
   if (refit) fitToRange()
 }
 
-function fitToRange() {
-  if (!map || !L) return
+/** Pure geometry: computes the fit-to-range center/zoom without touching the map's view. */
+function computeFitView(): { center: LatLng, zoom: number } | null {
+  if (!map || !L) return null
   const pts: [number, number][] = props.stores.map((s) => [s.lat, s.lon] as [number, number])
   pts.push([props.lat, props.lon])
 
@@ -70,7 +71,7 @@ function fitToRange() {
   const eps = 0.004
   if (maxLat - minLat < eps) { minLat -= eps; maxLat += eps }
   if (maxLon - minLon < eps) { minLon -= eps; maxLon += eps }
-  if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return
+  if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return null
 
   const bounds = L.latLngBounds(L.latLng(minLat, minLon), L.latLng(maxLat, maxLon))
   const size = map.getSize()
@@ -79,7 +80,12 @@ function fitToRange() {
   const zoom = Math.min(14, map.getBoundsZoom(bounds, false, pad))
   const center = bounds.getCenter()
   const shift = map.project(center, zoom).subtract(L.point((left - 40) / 2, 0))
-  map.setView(map.unproject(shift, zoom), zoom, { animate: false })
+  return { center: map.unproject(shift, zoom), zoom }
+}
+
+function fitToRange() {
+  const view = computeFitView()
+  if (view) map!.setView(view.center, view.zoom, { animate: false })
 }
 
 function focus(store: { lat: number, lon: number }) {
@@ -94,6 +100,16 @@ onMounted(async () => {
 
   map = L.map(mapEl.value, { zoomControl: false, attributionControl: true }).setView([props.lat, props.lon], 12)
   L.control.zoom({ position: 'bottomright' }).addTo(map)
+  map.invalidateSize()
+
+  // Settle on the final (fit-to-range) view BEFORE adding the tile layer, so tiles are only
+  // ever requested once, at the correct zoom. Setting the view a second time right after tiles
+  // for the first (temporary) view had already started loading left stale tiles from the
+  // abandoned zoom level rendered alongside the new ones - reported as tiles that only line up
+  // correctly on one axis, since each generation's tile grid has its own pixel origin.
+  const initialView = computeFitView()
+  if (initialView) map.setView(initialView.center, initialView.zoom, { animate: false })
+  lastFitKey = `${props.lat},${props.lon},${props.radiusKm}`
 
   const mapTilerKey = useRuntimeConfig().public.mapTilerKey
   if (mapTilerKey) {
@@ -117,24 +133,20 @@ onMounted(async () => {
   }
 
   markerLayer = L.layerGroup().addTo(map)
+  ring = L.circle([props.lat, props.lon], {
+    radius: props.radiusKm * 1000,
+    color: '#968ae0',
+    weight: 1,
+    opacity: 0.45,
+    fillColor: '#9184d9',
+    fillOpacity: 0.05,
+  }).addTo(map)
+  meMarker = L.marker([props.lat, props.lon], {
+    zIndexOffset: 1000,
+    icon: L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="mb-me"></div>' }),
+  }).addTo(map).bindPopup('You are here')
 
-  map.whenReady(() => {
-    if (!map) return
-    map.invalidateSize()
-    ring = L.circle([props.lat, props.lon], {
-      radius: props.radiusKm * 1000,
-      color: '#968ae0',
-      weight: 1,
-      opacity: 0.45,
-      fillColor: '#9184d9',
-      fillOpacity: 0.05,
-    }).addTo(map)
-    meMarker = L.marker([props.lat, props.lon], {
-      zIndexOffset: 1000,
-      icon: L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="mb-me"></div>' }),
-    }).addTo(map).bindPopup('You are here')
-    paintMarkers(true)
-  })
+  paintMarkers(false)
 })
 
 onBeforeUnmount(() => {
