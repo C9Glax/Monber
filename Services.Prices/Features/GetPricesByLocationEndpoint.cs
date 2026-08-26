@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MonberAPI.PoiData.Database;
 using Services.Prices;
 using Services.Prices.Database;
@@ -15,6 +16,7 @@ internal abstract class GetPricesByLocationEndpoint
 
     public static async Task<Ok<PriceObservation[]>> Handle(
         Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
+        ILogger<GetPricesByLocationEndpoint> logger,
         [FromQuery(Name = "lat")] float lat, [FromQuery(Name = "lon")] float lon,
         CancellationToken ct)
     {
@@ -48,7 +50,7 @@ internal abstract class GetPricesByLocationEndpoint
 
         Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
             httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
-        PriceObservation[] result = await PriceLookup.GetPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, ct);
+        PriceObservation[] result = await PriceLookup.GetPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct);
 
         return TypedResults.Ok(result);
     }
