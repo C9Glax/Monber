@@ -7,8 +7,8 @@ internal static class JsonToDb
     internal static DbStore ToDbStore(this OverpassDataFetcher.Store store) => new DbStore(
         store.Id,
         store.StoreInfo.Name,
-        store.Latitude,
-        store.Longitude,
+        store.ResolvedLatitude,
+        store.ResolvedLongitude,
         store.StoreInfo.Brand,
         store.StoreInfo.Shop,
         store.StoreInfo.OpeningHours);
