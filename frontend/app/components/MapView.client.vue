@@ -138,18 +138,30 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (repaintTimer) clearTimeout(repaintTimer)
   map?.remove()
   map = null
 })
 
 let lastFitKey = ''
+let repaintTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   () => [props.lat, props.lon, props.radiusKm, props.stores.map((s) => s.id).join(',')],
   () => {
-    const key = `${props.lat},${props.lon},${props.radiusKm}`
-    const moved = key !== lastFitKey
-    lastFitKey = key
-    paintMarkers(moved)
+    // Debounced: the radius slider/number input fires on every tick while dragging, and each
+    // call here can trigger map.setView() via fitToRange(). Calling setView in a rapid burst -
+    // faster than Leaflet's async tile loading/pruning for the previous call can keep up with -
+    // leaves orphaned tiles from stale zoom generations rendered alongside new ones, which is
+    // what showed up as tiles rendered at seemingly unrelated/overlapping positions. Coalescing
+    // rapid-fire updates into one, after the burst settles, avoids flooding Leaflet's tile layer.
+    if (repaintTimer) clearTimeout(repaintTimer)
+    repaintTimer = setTimeout(() => {
+      repaintTimer = null
+      const key = `${props.lat},${props.lon},${props.radiusKm}`
+      const moved = key !== lastFitKey
+      lastFitKey = key
+      paintMarkers(moved)
+    }, 150)
   },
 )
 </script>
