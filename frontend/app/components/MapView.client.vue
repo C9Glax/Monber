@@ -80,12 +80,13 @@ function computeFitView(): { center: LatLng, zoom: number } | null {
     minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la)
     minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo)
   }
-  const eps = 0.004
-  if (maxLat - minLat < eps) { minLat -= eps; maxLat += eps }
-  if (maxLon - minLon < eps) { minLon -= eps; maxLon += eps }
   if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return null
 
+  // Always cover the full selected radius around the user, even with zero (priced) stores to
+  // bound around - otherwise the map zoomed in tight on just the user's own point regardless of
+  // the radius setting, leaving most unpriced-store markers correctly placed but off-screen.
   const bounds = L.latLngBounds(L.latLng(minLat, minLon), L.latLng(maxLat, maxLon))
+    .extend(L.latLng(props.lat, props.lon).toBounds(props.radiusKm * 1000 * 2))
   const size = map.getSize()
   const left = Math.min(430, Math.round(size.x * 0.42))
   const pad = L.point(left + 40, 140)
