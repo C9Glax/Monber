@@ -31,7 +31,11 @@ app.MapDefaultEndpoints();
 app.MapOpenApi();
 app.MapScalarApiReference("/docs");
 
-app.UseHttpsRedirection();
+// No UseHttpsRedirection() - this service is only ever reached internally, over plain http,
+// via the gateway's YARP reverse proxy using service discovery (http://services-poi).
+// Redirecting to the app's own https endpoint 307s every proxied request right back through
+// the gateway, since YARP doesn't follow redirects, which the frontend then reports as
+// "Could not reach the POI/Prices services."
 
 app.UseAuthorization();
 
