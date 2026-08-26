@@ -10,6 +10,8 @@ const props = defineProps<{
   stores: RangedStore[]
 }>()
 
+const emit = defineEmits<{ locationClick: [lat: number, lon: number] }>()
+
 const mapEl = ref<HTMLDivElement | null>(null)
 let L: typeof import('leaflet')
 let map: LeafletMap | null = null
@@ -119,6 +121,11 @@ onMounted(async () => {
   map.on('movestart zoomstart', () => {
     if (!suppressInteraction) userInteracted = true
   })
+  // Clicking the base map moves the search center there. Interactive layers (store markers,
+  // popups) stop this event from reaching the map on their own, so this only fires for clicks
+  // on open map area - see also the ring circle's `interactive: false` below, which would
+  // otherwise swallow clicks anywhere inside the radius circle.
+  map.on('click', (e) => emit('locationClick', e.latlng.lat, e.latlng.lng))
   programmaticSetView([props.lat, props.lon], 12, { animate: false })
   L.control.zoom({ position: 'bottomright' }).addTo(map)
   map.invalidateSize()
@@ -162,6 +169,7 @@ onMounted(async () => {
     opacity: 0.45,
     fillColor: '#9184d9',
     fillOpacity: 0.05,
+    interactive: false,
   }).addTo(map)
   meMarker = L.marker([props.lat, props.lon], {
     zIndexOffset: 1000,

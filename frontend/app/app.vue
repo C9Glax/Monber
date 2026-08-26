@@ -37,6 +37,12 @@ function selectStore(store: { lat: number, lon: number }) {
   mapView.value?.focus(store)
 }
 
+function onMapLocationClick(clickLat: number, clickLon: number) {
+  lat.value = clickLat
+  lon.value = clickLon
+  placeLabel.value = 'Custom location'
+}
+
 function locate() {
   if (!navigator.geolocation) return
   locating.value = true
@@ -58,7 +64,14 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
 
 <template>
   <div class="app-root">
-    <MapView ref="mapView" :lat="lat" :lon="lon" :radius-km="radiusKm" :stores="rangeStores" />
+    <MapView
+      ref="mapView"
+      :lat="lat"
+      :lon="lon"
+      :radius-km="radiusKm"
+      :stores="rangeStores"
+      @location-click="onMapLocationClick"
+    />
 
     <div class="overlay">
       <BrandBar />
