@@ -83,13 +83,30 @@ function computeFitView(): { center: LatLng, zoom: number } | null {
   return { center: map.unproject(shift, zoom), zoom }
 }
 
+// Tracks whether the user has manually panned/zoomed the map, so subsequent radius/data
+// changes don't yank the view back to the auto-fit bounds. suppressInteraction distinguishes
+// our own programmatic setView calls (which also fire movestart/zoomstart) from real user
+// interaction (drag, scroll-zoom, pinch, keyboard pan) picked up by the map's event listener.
+let userInteracted = false
+let suppressInteraction = false
+
+function programmaticSetView(center: LatLng | [number, number], zoom: number, opts?: { animate?: boolean }) {
+  if (!map) return
+  suppressInteraction = true
+  map.setView(center, zoom, opts)
+  suppressInteraction = false
+}
+
 function fitToRange() {
   const view = computeFitView()
-  if (view) map!.setView(view.center, view.zoom, { animate: false })
+  if (view) programmaticSetView(view.center, view.zoom, { animate: false })
 }
 
 function focus(store: { lat: number, lon: number }) {
-  map?.setView([store.lat, store.lon], 15, { animate: true })
+  // An explicit "show on map" / store click is itself a deliberate view change - treat it like
+  // manual interaction so a later radius tweak doesn't yank the view away from what was asked for.
+  userInteracted = true
+  programmaticSetView([store.lat, store.lon], 15, { animate: true })
 }
 
 defineExpose({ focus })
@@ -98,7 +115,11 @@ onMounted(async () => {
   L = await import('leaflet')
   if (!mapEl.value) return
 
-  map = L.map(mapEl.value, { zoomControl: false, attributionControl: true }).setView([props.lat, props.lon], 12)
+  map = L.map(mapEl.value, { zoomControl: false, attributionControl: true })
+  map.on('movestart zoomstart', () => {
+    if (!suppressInteraction) userInteracted = true
+  })
+  programmaticSetView([props.lat, props.lon], 12, { animate: false })
   L.control.zoom({ position: 'bottomright' }).addTo(map)
   map.invalidateSize()
 
@@ -108,7 +129,8 @@ onMounted(async () => {
   // abandoned zoom level rendered alongside the new ones - reported as tiles that only line up
   // correctly on one axis, since each generation's tile grid has its own pixel origin.
   const initialView = computeFitView()
-  if (initialView) map.setView(initialView.center, initialView.zoom, { animate: false })
+  if (initialView) programmaticSetView(initialView.center, initialView.zoom, { animate: false })
+  lastLatLon = `${props.lat},${props.lon}`
   lastFitKey = `${props.lat},${props.lon},${props.radiusKm}`
 
   const mapTilerKey = useRuntimeConfig().public.mapTilerKey
@@ -155,6 +177,7 @@ onBeforeUnmount(() => {
   map = null
 })
 
+let lastLatLon = ''
 let lastFitKey = ''
 let repaintTimer: ReturnType<typeof setTimeout> | null = null
 watch(
@@ -169,9 +192,22 @@ watch(
     if (repaintTimer) clearTimeout(repaintTimer)
     repaintTimer = setTimeout(() => {
       repaintTimer = null
-      const key = `${props.lat},${props.lon},${props.radiusKm}`
-      const moved = key !== lastFitKey
+
+      const latLonKey = `${props.lat},${props.lon}`
+      const locationChanged = latLonKey !== lastLatLon
+      lastLatLon = latLonKey
+      // A genuinely new location (e.g. "Locate me") always deserves a fresh, centered view,
+      // even if the user had manually panned/zoomed away from a previous auto-fit.
+      if (locationChanged) userInteracted = false
+
+      const key = `${latLonKey},${props.radiusKm}`
+      const dataChanged = key !== lastFitKey
       lastFitKey = key
+
+      // Once the user has manually panned/zoomed (or clicked a store to focus it), don't yank
+      // the view back just because the radius changed - only a genuinely new location should
+      // move the map from then on.
+      const moved = dataChanged && (locationChanged || !userInteracted)
       paintMarkers(moved)
     }, 150)
   },
