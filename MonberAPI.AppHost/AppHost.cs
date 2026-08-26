@@ -2,9 +2,14 @@ using Aspire.Hosting.ApplicationModel;
 
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
-IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI>("services-poi");
+// WithHttpHealthCheck lets the gateway's WaitFor below block on more than just "process started" -
+// for POI in particular, /health only turns healthy once the startup Overpass store sync finishes
+// (see OverpassSyncHealthCheck in Services.POI).
+IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI>("services-poi")
+    .WithHttpHealthCheck("/health");
 
-IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_Prices>("services-prices");
+IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_Prices>("services-prices")
+    .WithHttpHealthCheck("/health");
 
 // The MapTiler key is never committed to source (*.key is gitignored). Read it from
 // MonberAPI.AppHost/MAPTILER_API.key if present, else Parameters:maptiler-api-key config
@@ -30,11 +35,15 @@ var frontend = builder.AddNpmApp("frontend", "../frontend", "dev")
 frontendInstall.WithParentRelationship(frontend);
 
 // The gateway is the single external entry point: it serves the UI (proxied through to the
-// frontend dev server) and the /poi and /prices APIs, all on one origin.
+// frontend dev server) and the /poi and /prices APIs, all on one origin. WaitFor holds it back
+// until both backing services report healthy, so it doesn't start proxying requests to a POI
+// service that's still mid Overpass-sync.
 builder.AddProject<Projects.MonberAPI_Gateway>("gateway")
     .WithReference(poi)
     .WithReference(prices)
     .WithReference(frontend)
+    .WaitFor(poi)
+    .WaitFor(prices)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();
