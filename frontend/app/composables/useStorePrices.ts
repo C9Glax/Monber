@@ -1,22 +1,20 @@
 import type { PoiStore, PriceObservation } from './useMonberApi'
 import { fetchPoiStores, fetchPrices } from './useMonberApi'
 
-export interface VariantDef {
-  key: 'orig' | 'ultra' | 'mango'
-  name: string
+/** A tracked pack size. Stores price every flavor of a given pack identically, so flavor isn't tracked -
+ * only pack size, since that's what actually moves the per-can price (bulk packs are cheaper per can). */
+export interface PackDef {
+  key: 'single' | 'four' | 'ten'
+  label: string
   product: string
-  color: string
-  dim: string
+  cans: number
 }
 
-/* Loose, low-chroma nods to each can's own palette — ported from the mockup, no brand marks. */
-export const VARIANTS: VariantDef[] = [
-  { key: 'orig', name: 'Original', product: 'Monster Energy Original', color: 'oklch(0.74 0.125 152)', dim: 'oklch(0.40 0.075 152)' },
-  { key: 'ultra', name: 'Ultra', product: 'Monster Energy Ultra', color: 'oklch(0.83 0.045 232)', dim: 'oklch(0.44 0.035 232)' },
-  { key: 'mango', name: 'Mango Loco', product: 'Monster Energy Mango Loco', color: 'oklch(0.79 0.125 66)', dim: 'oklch(0.44 0.085 66)' },
+export const PACKS: PackDef[] = [
+  { key: 'single', label: 'Single can', product: 'Monster Energy 0,5l', cans: 1 },
+  { key: 'four', label: '4-pack', product: 'Monster Energy 4x0,5l', cans: 4 },
+  { key: 'ten', label: '10-pack', product: 'Monster Energy 10x0,5l', cans: 10 },
 ]
-
-export type VariantPrices = Record<VariantDef['key'], number | null>
 
 export interface MergedStore {
   id: number
@@ -26,13 +24,15 @@ export interface MergedStore {
   lat: number
   lon: number
   dist: number
-  prices: VariantPrices
+  /** Cheapest observed price per single can, normalized across pack sizes (pack price / can count). */
+  perCanPrice: number | null
+  /** Which pack size produced `perCanPrice`, for display only - not a selectable filter. */
+  pack: string | null
   latestFetchedAt: string | null
 }
 
 export interface RangedStore extends MergedStore {
   low: number
-  lowVariant: VariantDef
 }
 
 export const MAX_RADIUS_KM = 30
@@ -75,15 +75,20 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
     // show them as plain "no price data" markers rather than only ever showing priced stores.
     const obs = byStore.get(store.id) ?? []
 
-    const prices: VariantPrices = { orig: null, ultra: null, mango: null }
+    let perCanPrice: number | null = null
+    let pack: string | null = null
     let latestFetchedAt: string | null = null
-    for (const variant of VARIANTS) {
-      const match = obs.find((o) => o.product === variant.product)
-      if (match) {
-        prices[variant.key] = match.price
-        if (!latestFetchedAt || new Date(match.fetchedAt) > new Date(latestFetchedAt)) {
-          latestFetchedAt = match.fetchedAt
-        }
+    for (const packDef of PACKS) {
+      const match = obs.find((o) => o.product === packDef.product)
+      if (!match) continue
+
+      const canPrice = match.price / packDef.cans
+      if (perCanPrice == null || canPrice < perCanPrice) {
+        perCanPrice = canPrice
+        pack = packDef.label
+      }
+      if (!latestFetchedAt || new Date(match.fetchedAt) > new Date(latestFetchedAt)) {
+        latestFetchedAt = match.fetchedAt
       }
     }
 
@@ -95,7 +100,8 @@ function mergeStores(pois: PoiStore[], observations: PriceObservation[], userLat
       lat: store.latitude,
       lon: store.longitude,
       dist: haversineKm(userLat, userLon, store.latitude, store.longitude),
-      prices,
+      perCanPrice,
+      pack,
       latestFetchedAt,
     })
   }
@@ -135,32 +141,19 @@ export function useStorePrices() {
     return mergeStores(pois.value, observations.value, lastQuery.value.lat, lastQuery.value.lon)
   })
 
-  /** Stores within `radiusKm`, cheapest price for `variantKey` (or overall) present, sorted lowest-first. */
-  function inRange(radiusKm: number, variantKey: VariantDef['key'] | null = null): RangedStore[] {
+  /** Stores within `radiusKm` with a per-can price, sorted lowest-first. */
+  function inRange(radiusKm: number): RangedStore[] {
     const out: RangedStore[] = []
     for (const store of merged.value) {
-      if (store.dist > radiusKm) continue
-
-      const candidates = variantKey ? [variantKey] : VARIANTS.map((v) => v.key)
-      let low: number | null = null
-      let lowVariant: VariantDef | null = null
-      for (const key of candidates) {
-        const price = store.prices[key]
-        if (price != null && (low == null || price < low)) {
-          low = price
-          lowVariant = VARIANTS.find((v) => v.key === key)!
-        }
-      }
-      if (low == null || !lowVariant) continue
-
-      out.push({ ...store, low, lowVariant })
+      if (store.dist > radiusKm || store.perCanPrice == null) continue
+      out.push({ ...store, low: store.perCanPrice })
     }
     return out.sort((a, b) => a.low - b.low || a.dist - b.dist)
   }
 
-  /** Stores within `radiusKm` that have no price data for any variant. */
+  /** Stores within `radiusKm` that have no price data for any pack size. */
   function unpricedInRange(radiusKm: number): MergedStore[] {
-    return merged.value.filter((store) => store.dist <= radiusKm && VARIANTS.every((v) => store.prices[v.key] == null))
+    return merged.value.filter((store) => store.dist <= radiusKm && store.perCanPrice == null)
   }
 
   return { pois, observations, loading, error, merged, refresh, inRange, unpricedInRange }

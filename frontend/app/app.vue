@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { VariantDef } from './composables/useStorePrices'
 import { MAX_RADIUS_KM } from './composables/useStorePrices'
 import { poiStoresUrl, pricesUrl } from './composables/useMonberApi'
 
@@ -9,15 +8,13 @@ const lat = ref(52.5200)
 const lon = ref(13.4050)
 const placeLabel = ref('Berlin Mitte, DE')
 const radiusKm = ref(10)
-const selectedVariant = ref<VariantDef['key'] | null>(null)
 const locating = ref(false)
 
 const { loading, error, refresh, inRange, unpricedInRange } = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
 
-const rangeStores = computed(() => inRange(radiusKm.value, selectedVariant.value))
-const allRangeStores = computed(() => inRange(radiusKm.value, null))
+const rangeStores = computed(() => inRange(radiusKm.value))
 const unpricedStores = computed(() => unpricedInRange(radiusKm.value))
 
 const best = computed(() => rangeStores.value[0] ?? null)
@@ -92,7 +89,6 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
         <div v-else-if="loading" class="loading-card">Loading nearby stores…</div>
         <template v-else>
           <CheapestCard :best="best" :area-avg="areaAvg" @show="showBestOnMap" />
-          <VariantList :all-range-stores="allRangeStores" v-model:selected="selectedVariant" />
           <StoreList :rows="rangeStores" :area-avg="areaAvg" @select="selectStore" />
         </template>
 

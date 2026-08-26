@@ -70,8 +70,9 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
                 continue;
 
             // Kaufland's weekly-offer search only ever returns a generic "MONSTER / Energy Drink" entry
-            // (no flavor breakdown), so matching is brand-level: a hit means "the queried product's brand
-            // is on this week's flyer for this store", not "this exact flavor is confirmed in stock".
+            // (no flavor or pack-size breakdown), so matching is brand-level: a hit means "Monster is on
+            // this week's flyer for this store", not "this exact pack size is confirmed in stock" - every
+            // tracked pack size resolves to the same flyer price when Monster has an offer.
             foreach (JsonElement offer in offerData.EnumerateArray())
             {
                 string? title = offer.TryGetProperty("title", out JsonElement t) ? t.GetString() : null;
