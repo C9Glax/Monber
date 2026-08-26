@@ -8,8 +8,14 @@ IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(ar
 IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI>("services-poi")
     .WithHttpHealthCheck("/health");
 
+// Prices' own startup store sync (see StoreSyncStatus) matches chain stores against the shared
+// `stores` table that POI owns - if it ran before POI's Overpass sync populated that table, every
+// brand would be skipped with no DbStoreExternalId rows ever written until someone manually hits
+// POST /update-stores again. WaitFor(poi) holds this service's own startup back until POI is healthy,
+// so its first (and normally only) sync attempt actually has stores to match against.
 IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_Prices>("services-prices")
-    .WithHttpHealthCheck("/health");
+    .WithHttpHealthCheck("/health")
+    .WaitFor(poi);
 
 // The MapTiler key is never committed to source (*.key is gitignored). Read it from
 // MonberAPI.AppHost/MAPTILER_API.key if present, else Parameters:maptiler-api-key config

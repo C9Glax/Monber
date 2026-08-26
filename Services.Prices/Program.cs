@@ -14,6 +14,13 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddAuthorization();
 
+// Keeps /health unhealthy - and Aspire's WaitFor from the gateway blocked - until the startup store
+// sync below has finished, so the gateway doesn't start proxying price requests before any
+// DbStoreExternalId rows exist (see StoreSyncStatus).
+builder.Services.AddSingleton<StoreSyncStatus>();
+builder.Services.AddHealthChecks()
+    .AddCheck<StoreSyncHealthCheck>("store-sync");
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -100,6 +107,8 @@ _ = Task.Run(async () =>
 
     await StoreSync.RunAsync(
         ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)), CancellationToken.None);
+
+    app.Services.GetRequiredService<StoreSyncStatus>().MarkComplete();
 });
 
 app.Run();
