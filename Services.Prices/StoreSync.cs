@@ -36,6 +36,10 @@ internal static class StoreSync
             }
 
             DbStore[] candidates = await ctx.Stores.Where(s => s.Brand == fetcher.Brand).ToArrayAsync(ct);
+            if (candidates.Length == 0)
+                // Services.POI hasn't synced this brand's stores into the shared table yet (e.g. both
+                // services' startup syncs are racing) - retry next run instead of marking fresh for 24h.
+                continue;
 
             foreach (ChainStore store in stores)
             {

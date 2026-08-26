@@ -73,16 +73,50 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
             // (no flavor or pack-size breakdown), so matching is brand-level: a hit means "Monster is on
             // this week's flyer for this store", not "this exact pack size is confirmed in stock" - every
             // tracked pack size resolves to the same flyer price when Monster has an offer.
+            //
+            // The same search response also mixes in next week's flyer once it's published - a
+            // dateFrom in the future - so each matching offer is dated instead of just taking the first
+            // hit: an offer already covering today is a current price, one starting later is a future
+            // price (see ChainPrice.EffectiveFrom), and anything already expired is ignored.
+            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            bool foundCurrent = false, foundFuture = false;
             foreach (JsonElement offer in offerData.EnumerateArray())
             {
+                if (foundCurrent && foundFuture)
+                    break;
+
                 string? title = offer.TryGetProperty("title", out JsonElement t) ? t.GetString() : null;
                 if (title is null || !product.Contains(title, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (offer.TryGetProperty("price", out JsonElement priceEl) && priceEl.TryGetDecimal(out decimal price))
+                if (!offer.TryGetProperty("price", out JsonElement priceEl) || !priceEl.TryGetDecimal(out decimal price))
+                    continue;
+
+                DateOnly? dateFrom = offer.TryGetProperty("dateFrom", out JsonElement fromEl) &&
+                                      DateOnly.TryParse(fromEl.GetString(), out DateOnly from)
+                    ? from
+                    : null;
+                DateOnly? dateTo = offer.TryGetProperty("dateTo", out JsonElement toEl) &&
+                                    DateOnly.TryParse(toEl.GetString(), out DateOnly to)
+                    ? to
+                    : null;
+
+                if (dateTo is { } end && end < today)
+                    continue; // Fully expired offer.
+
+                if (dateFrom is { } start && start > today)
                 {
+                    if (foundFuture)
+                        continue;
+                    results.Add(new ChainPrice(product, price, "EUR", start));
+                    foundFuture = true;
+                }
+                else
+                {
+                    if (foundCurrent)
+                        continue;
                     results.Add(new ChainPrice(product, price, "EUR"));
-                    break;
+                    foundCurrent = true;
                 }
             }
         }

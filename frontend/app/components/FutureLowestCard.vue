@@ -1,0 +1,109 @@
+<script setup lang="ts">
+import type { RangedStore } from '../composables/useStorePrices'
+import { eur } from '../composables/useStorePrices'
+
+const props = defineProps<{
+  best: RangedStore | null
+}>()
+
+const emit = defineEmits<{ show: [] }>()
+
+const startsLabel = computed(() => {
+  if (!props.best?.effectiveFrom) return ''
+  const date = new Date(props.best.effectiveFrom)
+  return `Starts ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+})
+</script>
+
+<template>
+  <div v-if="best" class="card">
+    <div class="kicker">Cheapest can soon</div>
+    <div class="price-row">
+      <div class="price">{{ eur(best.low) }}</div>
+      <div class="price-meta">
+        <div class="per-can">per 500&nbsp;ml can</div>
+        <div class="pack">{{ best.pack ?? '' }}</div>
+      </div>
+    </div>
+    <div class="store-row">
+      <span class="store-name">{{ best.brand }}</span>
+      <span class="store-meta">{{ best.dist.toFixed(1) }} km<template v-if="best.name"> · {{ best.name }}</template></span>
+    </div>
+    <div class="tags-row">
+      <span class="tag tag-accent">{{ startsLabel }}</span>
+    </div>
+    <button class="btn btn-primary btn-block" @click="emit('show')">
+      <i class="ph ph-navigation-arrow" />Show on map
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.card {
+  flex: none;
+  position: relative;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-neutral-800);
+  background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.kicker {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-400);
+  margin-bottom: var(--space-4);
+}
+.price-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.price {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 68px;
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+}
+.price-meta {
+  padding-top: 4px;
+}
+.per-can {
+  font-size: 12px;
+  color: var(--color-neutral-500);
+}
+.pack {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-accent-300);
+}
+.store-row {
+  margin-top: var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.store-name {
+  font-family: var(--font-heading);
+  font-size: 17px;
+}
+.store-meta {
+  font-size: 12px;
+  color: var(--color-neutral-500);
+}
+.tags-row {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.tags-row .tag {
+  font-size: 10px;
+}
+</style>

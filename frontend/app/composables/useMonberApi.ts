@@ -15,6 +15,8 @@ export interface PriceObservation {
   price: number
   currency: string
   fetchedAt: string
+  /** Set when this price isn't active yet - it becomes effective on this date (e.g. an upcoming sale). */
+  effectiveFrom: string | null
 }
 
 function apiBase(): string {
