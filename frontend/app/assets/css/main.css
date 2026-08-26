@@ -111,6 +111,13 @@ body {
 
 /* — map + overlay chrome, from the mockup's inline <style> — */
 .leaflet-container { background: #10121c; font-family: var(--font-body); }
+/* Fractional OS display scaling (e.g. 115%) means CSS pixel boundaries don't land cleanly on
+   physical device pixels, so the browser's compositor can leave hairline gaps/seams between
+   adjacent 256px tile images - worse on one axis than the other depending on window size. The
+   standard Leaflet workaround is to render each tile very slightly oversized so tiles overlap
+   a hair instead of gapping; only the tile's own rendered box grows; its position (top-left,
+   via Leaflet's translate3d) is unaffected. */
+.leaflet-tile { width: 256.5px !important; height: 256.5px !important; }
 .leaflet-control-attribution { background: rgba(22,24,38,.7) !important; color: #75798c !important; font-size: 10px !important; }
 .leaflet-control-attribution a { color: #9397ab !important; }
 .leaflet-bar a { background: #232532 !important; color: #e9e9ed !important; border-color: #3f424d !important; }
