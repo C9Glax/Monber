@@ -17,7 +17,10 @@ const startsLabel = computed(() => {
 
 <template>
   <div v-if="best" class="card">
-    <div class="kicker">Cheapest can soon</div>
+    <div class="kicker-row">
+      <div class="kicker">Cheapest can soon</div>
+      <span class="tag tag-accent">{{ startsLabel }}</span>
+    </div>
     <div class="price-row">
       <div class="price">{{ eur(best.low) }}</div>
       <div class="price-meta">
@@ -29,9 +32,6 @@ const startsLabel = computed(() => {
       <a v-if="best.sourceUrl" class="store-name store-link" :href="best.sourceUrl" target="_blank" rel="noopener noreferrer">{{ best.brand }}</a>
       <span v-else class="store-name">{{ best.brand }}</span>
       <span class="store-meta">{{ best.dist.toFixed(1) }} km<template v-if="best.name"> · {{ best.name }}</template></span>
-    </div>
-    <div class="tags-row">
-      <span class="tag tag-accent">{{ startsLabel }}</span>
     </div>
     <button class="btn btn-primary btn-block" @click="emit('show')">
       <i class="ph ph-navigation-arrow" />Show on map
@@ -51,12 +51,22 @@ const startsLabel = computed(() => {
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
+.kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
 .kicker {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-accent-400);
-  margin-bottom: var(--space-4);
+}
+.kicker-row .tag {
+  font-size: 10px;
+  flex: none;
 }
 .price-row {
   display: flex;
@@ -103,15 +113,5 @@ const startsLabel = computed(() => {
 .store-meta {
   font-size: 12px;
   color: var(--color-neutral-500);
-}
-.tags-row {
-  margin-top: var(--space-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-.tags-row .tag {
-  font-size: 10px;
 }
 </style>
