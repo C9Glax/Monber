@@ -11,7 +11,7 @@ namespace Services.Prices.Features;
 
 internal abstract class GetPricesByLocationEndpoint
 {
-    private const float Radius = 30;
+    private const float Radius = 10;
 
     public static async Task<Ok<PriceObservation[]>> Handle(
         Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,

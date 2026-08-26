@@ -37,7 +37,7 @@ export interface RangedStore extends MergedStore {
   low: number
 }
 
-export const MAX_RADIUS_KM = 30
+export const MAX_RADIUS_KM = 10
 
 export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371

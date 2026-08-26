@@ -10,7 +10,7 @@ namespace Services.POI.Features;
 
 internal abstract class GetStoresEndpoint
 {
-    private const float Radius = 30;
+    private const float Radius = 10;
     public static async Task<Ok<Store[]>> Handle(Context ctx, [FromQuery(Name = "lat")]float lat, [FromQuery(Name = "lon")]float lon, CancellationToken ct)
     {
         DbStore[] stores = await ctx.Stores.FromSql($"""
