@@ -31,6 +31,8 @@ export interface MergedStore {
   latestFetchedAt: string | null
   /** Set when `perCanPrice` comes from a future/upcoming price (see PriceObservation.effectiveFrom). */
   effectiveFrom: string | null
+  /** The page `perCanPrice` was fetched from, if known. */
+  sourceUrl: string | null
 }
 
 export interface RangedStore extends MergedStore {
@@ -91,6 +93,7 @@ function mergeStores(
     let pack: string | null = null
     let latestFetchedAt: string | null = null
     let effectiveFrom: string | null = null
+    let sourceUrl: string | null = null
     for (const packDef of PACKS) {
       const match = obs.find((o) => o.product === packDef.product)
       if (!match) continue
@@ -100,6 +103,7 @@ function mergeStores(
         perCanPrice = canPrice
         pack = packDef.label
         effectiveFrom = match.effectiveFrom
+        sourceUrl = match.sourceUrl
       }
       if (!latestFetchedAt || new Date(match.fetchedAt) > new Date(latestFetchedAt)) {
         latestFetchedAt = match.fetchedAt
@@ -118,6 +122,7 @@ function mergeStores(
       pack,
       latestFetchedAt,
       effectiveFrom,
+      sourceUrl,
     })
   }
 

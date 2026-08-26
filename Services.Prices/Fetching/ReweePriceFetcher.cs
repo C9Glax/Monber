@@ -101,7 +101,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
                 if (!tilePackSize.Equals(packSize, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                results.Add(new ChainPrice(product, price, "EUR"));
+                results.Add(new ChainPrice(product, price, "EUR", SourceUrl: SearchUrl));
                 break;
             }
         }

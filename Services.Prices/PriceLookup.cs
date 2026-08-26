@@ -38,7 +38,7 @@ internal static class PriceLookup
                 {
                     ChainPrice[] live = await fetcher.FetchPricesAsync(chainStore, stale, ct);
                     foreach (ChainPrice price in live)
-                        ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow, price.EffectiveFrom));
+                        ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow, price.EffectiveFrom, price.SourceUrl));
 
                     if (live.Length > 0)
                     {
