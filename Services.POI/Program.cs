@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MonberAPI.ServiceDefaults;
 using Scalar.AspNetCore;
 using Services.POI;
@@ -23,6 +24,13 @@ builder.Services.AddDbContext<Context>(opts =>
     opts.EnableSensitiveDataLogging();
     opts.EnableDetailedErrors();
 });
+
+// Keeps /health unhealthy - and Aspire's WaitFor from the gateway blocked - until the startup
+// Overpass sync below has finished, so the gateway doesn't start proxying to POI before its store
+// data is in place.
+builder.Services.AddSingleton<OverpassSyncStatus>();
+builder.Services.AddHealthChecks()
+    .AddCheck<OverpassSyncHealthCheck>("overpass-sync");
 
 WebApplication app = builder.Build();
 
@@ -50,7 +58,9 @@ await using (Context ctx = app.Services.CreateAsyncScope().ServiceProvider.GetRe
     await ctx.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", CancellationToken.None);
     await ctx.Database.ExecuteSqlRawAsync("PRAGMA busy_timeout=5000;", CancellationToken.None);
 
-    await OverpassDataFetcher.LoadStores(ctx, CancellationToken.None);
+    ILogger logger = app.Services.GetRequiredService<ILogger<Program>>();
+    await OverpassDataFetcher.LoadStores(ctx, logger, CancellationToken.None);
+    app.Services.GetRequiredService<OverpassSyncStatus>().MarkComplete();
 }
 
 app.Run();

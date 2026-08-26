@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MonberAPI.PoiData.Database;
 using Services.POI.Database;
 using Services.POI.Extensions;
@@ -73,33 +74,53 @@ internal static class OverpassDataFetcher
         return await response.Content.ReadFromJsonAsync<ResponseStruct>(ct);
     }
 
-    internal static async Task LoadStores(Context context, CancellationToken ct)
+    internal static async Task LoadStores(Context context, ILogger logger, CancellationToken ct)
     {
+        logger.LogInformation("Starting Overpass store sync...");
+
         if (await context.Version.AnyAsync(ct))
         {
-            if (await context.Version.ToListAsync(ct) is not { Count: >0 } versions ||
-                await GetOsmBaseTimestamp(ct) is not { Osm3S: { TimestampOsmBase: { } fetched } } ||
-                fetched.Subtract(versions.Max(v => v.OsmBaseTimestamp)).TotalHours < 24)
+            if (await context.Version.ToListAsync(ct) is not { Count: >0 } versions)
             {
+                logger.LogWarning("Overpass sync skipped: no existing version record could be read despite one being present");
+                return;
+            }
+
+            DateTimeOffset lastSynced = versions.Max(v => v.OsmBaseTimestamp);
+
+            if (await GetOsmBaseTimestamp(ct) is not { Osm3S: { TimestampOsmBase: { } fetched } })
+            {
+                logger.LogWarning("Overpass sync skipped: could not fetch the current OSM base timestamp to check for updates");
+                return;
+            }
+
+            if (fetched.Subtract(lastSynced).TotalHours < 24)
+            {
+                logger.LogInformation("Overpass sync skipped: last synced at {LastSynced}, still within the last 24 hours", lastSynced);
                 return;
             }
         }
 
         if (await GetStores(ct) is not { Elements: { Length: >0 } stores, Osm3S: { TimestampOsmBase: { } timestamp }, Generator: { } generator })
         {
+            logger.LogWarning("Overpass sync failed: the store query returned no data or a non-success response");
             return;
         }
         DbStore[] dbStores = [.. stores.Where(s => s.ResolvedLatitude != 0 && s.ResolvedLongitude != 0).Select(s => s.ToDbStore())];
 
         long[] storeIds = dbStores.Select(s => s.Id).ToArray();
-        await context.Stores.Where(s => storeIds.All(id => id != s.Id)).ExecuteDeleteAsync(ct);
-            
+        int removedCount = await context.Stores.Where(s => storeIds.All(id => id != s.Id)).ExecuteDeleteAsync(ct);
+
         long[] dbStoreIds = await context.Stores.Select(s => s.Id).ToArrayAsync(ct);
         DbStore[] newStores = [.. dbStores.ExceptBy(dbStoreIds, s => s.Id)];
 
         await context.Stores.AddRangeAsync(newStores, ct);
         await context.Version.AddAsync(new DbVersion(0, timestamp, generator), ct);
         await context.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Overpass sync complete: {NewCount} new stores added, {RemovedCount} stale stores removed, {TotalCount} stores tracked",
+            newStores.Length, removedCount, dbStores.Length);
     }
         
 
