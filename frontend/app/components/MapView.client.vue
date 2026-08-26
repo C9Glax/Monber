@@ -20,14 +20,6 @@ let markerLayer: LayerGroup | null = null
 let ring: Circle | null = null
 let meMarker: Marker | null = null
 
-function variantColorFor(store: RangedStore) {
-  return store.lowVariant.color
-}
-
-function variantDimFor(store: RangedStore) {
-  return store.lowVariant.dim
-}
-
 async function paintMarkers(refit: boolean) {
   if (!map || !markerLayer) return
   markerLayer.clearLayers()
@@ -40,8 +32,8 @@ async function paintMarkers(refit: boolean) {
   for (const store of props.stores) {
     const isBest = best && store.id === best.id
     const style = isBest
-      ? `background:${variantColorFor(store)};border-color:${variantColorFor(store)};color:#161826;font-weight:600;`
-      : `border-color:${variantDimFor(store)};color:${variantColorFor(store)};`
+      ? 'background:var(--color-accent-400);border-color:var(--color-accent-400);color:#161826;font-weight:600;'
+      : 'border-color:var(--color-neutral-700);color:var(--color-accent-300);'
 
     const marker = L.marker([store.lat, store.lon], {
       icon: L.divIcon({
@@ -52,7 +44,7 @@ async function paintMarkers(refit: boolean) {
       }),
     })
     marker.bindPopup(
-      `<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>${eur(store.low)} · ${store.lowVariant.name} · ${store.dist.toFixed(1)} km`,
+      `<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>${eur(store.low)} · ${store.pack} · ${store.dist.toFixed(1)} km`,
     )
     marker.addTo(markerLayer)
   }

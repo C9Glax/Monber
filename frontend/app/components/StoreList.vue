@@ -29,7 +29,7 @@ function isDeal(store: RangedStore): boolean {
         class="row"
         @click="emit('select', row)"
       >
-        <div class="bar" :style="{ background: row.lowVariant.color }" aria-hidden="true" />
+        <div class="bar" aria-hidden="true" />
         <div class="brand-line">
           <span class="brand">{{ row.brand }}</span>
           <span class="dist">{{ row.dist.toFixed(1) }} km</span>
@@ -37,7 +37,7 @@ function isDeal(store: RangedStore): boolean {
         </div>
         <div class="price">{{ eur(row.low) }}</div>
         <div class="detail">
-          <template v-if="row.name">{{ row.name }} · </template>{{ row.lowVariant.name }}
+          <template v-if="row.name">{{ row.name }} · </template>{{ row.pack }}
         </div>
         <div class="ago">{{ ago(row.latestFetchedAt) }}</div>
       </div>
@@ -101,6 +101,7 @@ function isDeal(store: RangedStore): boolean {
   grid-row: 1 / 3;
   border-radius: 999px;
   opacity: 0.85;
+  background: var(--color-accent-500);
 }
 .brand-line {
   display: flex;

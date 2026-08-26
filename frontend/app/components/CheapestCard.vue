@@ -14,17 +14,14 @@ const savings = computed(() => {
   return `€${(props.areaAvg - props.best.low).toFixed(2)} under area average`
 })
 
-const glowStyle = computed(() => {
-  const color = props.best?.lowVariant.color
-  return {
-    position: 'absolute' as const,
-    inset: 0,
-    pointerEvents: 'none' as const,
-    background: color
-      ? `radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, ${color} 12%, transparent) 0%, transparent 62%)`
-      : 'transparent',
-  }
-})
+const glowStyle = computed(() => ({
+  position: 'absolute' as const,
+  inset: 0,
+  pointerEvents: 'none' as const,
+  background: props.best
+    ? 'radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--color-accent-400) 12%, transparent) 0%, transparent 62%)'
+    : 'transparent',
+}))
 </script>
 
 <template>
@@ -35,9 +32,7 @@ const glowStyle = computed(() => {
       <div class="price">{{ eur(best?.low ?? null) }}</div>
       <div class="price-meta">
         <div class="per-can">per 500&nbsp;ml can</div>
-        <div class="variant" :style="{ color: best ? best.lowVariant.color : 'var(--color-accent-300)' }">
-          {{ best?.lowVariant.name ?? '' }}
-        </div>
+        <div class="pack">{{ best?.pack ?? '' }}</div>
       </div>
     </div>
     <div class="store-row">
@@ -94,9 +89,10 @@ const glowStyle = computed(() => {
   font-size: 12px;
   color: var(--color-neutral-500);
 }
-.variant {
+.pack {
   margin-top: 4px;
   font-size: 12px;
+  color: var(--color-accent-300);
 }
 .store-row {
   margin-top: var(--space-6);
