@@ -43,6 +43,8 @@ builder.Services.AddHttpClient("FlareSolverr", c =>
 {
     c.BaseAddress = new Uri(builder.Configuration["FlareSolverr:Url"] ?? "http://localhost:8191");
 })
+    // Registered unconditionally so DI resolves even when unused - PriceFetchers only actually creates a
+    // client from it (and thus dials this address) when FlareSolverrOptions.IsConfigured is true.
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -96,7 +98,8 @@ _ = Task.Run(async () =>
     Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
     IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
 
-    await StoreSync.RunAsync(ctx, PriceFetchers.All(httpClientFactory), CancellationToken.None);
+    await StoreSync.RunAsync(
+        ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)), CancellationToken.None);
 });
 
 app.Run();
