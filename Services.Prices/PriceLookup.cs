@@ -27,9 +27,16 @@ internal static class PriceLookup
                 .Where(p => p.StoreId == store.StoreId && products.Contains(p.Product))
                 .ToArrayAsync(ct);
 
-            string[] fresh = [.. existing
-                .Where(p => DateOnly.FromDateTime(p.FetchedAt.UtcDateTime) == today)
-                .Select(p => p.Product)];
+            Dictionary<string, DbPriceCheck> checksByProduct = await ctx.PriceChecks
+                .Where(c => c.StoreId == store.StoreId && products.Contains(c.Product))
+                .ToDictionaryAsync(c => c.Product, ct);
+
+            // Freshness is tracked separately from observations (DbPriceCheck), not derived from
+            // whether a price was found - a product a store doesn't stock still needs to count as
+            // "checked today" or it would be re-fetched live on every single request forever.
+            string[] fresh = [.. checksByProduct
+                .Where(kv => DateOnly.FromDateTime(kv.Value.LastCheckedAt.UtcDateTime) == today)
+                .Select(kv => kv.Key)];
             string[] stale = [.. products.Except(fresh)];
 
             if (stale.Length > 0 && fetchersByBrand.TryGetValue(store.Brand, out IChainPriceFetcher? fetcher))
@@ -44,11 +51,17 @@ internal static class PriceLookup
                     foreach (ChainPrice price in live)
                         ctx.Prices.Add(new DbPriceObservation(0, store.StoreId, price.Product, price.Price, price.Currency, DateTimeOffset.UtcNow, price.EffectiveFrom, price.SourceUrl));
 
-                    if (live.Length > 0)
+                    foreach (string product in stale)
                     {
-                        await ctx.SaveChangesAsync(ct);
-                        existing = [.. existing, .. ctx.Prices.Local.Where(p => p.StoreId == store.StoreId && live.Any(l => l.Product == p.Product))];
+                        if (checksByProduct.TryGetValue(product, out DbPriceCheck? check))
+                            ctx.Entry(check).CurrentValues.SetValues(check with { LastCheckedAt = DateTimeOffset.UtcNow });
+                        else
+                            ctx.PriceChecks.Add(new DbPriceCheck(store.StoreId, product, DateTimeOffset.UtcNow));
                     }
+
+                    await ctx.SaveChangesAsync(ct);
+                    if (live.Length > 0)
+                        existing = [.. existing, .. ctx.Prices.Local.Where(p => p.StoreId == store.StoreId && live.Any(l => l.Product == p.Product))];
 
                     logger.LogInformation(
                         "Fetched {Count} live prices for {Brand} store {StoreId}",
