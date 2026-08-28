@@ -10,6 +10,7 @@ internal class Context(DbContextOptions<Context> options) : DbContext(options)
 
     internal DbSet<DbStoreExternalId> StoreExternalIds { get; init; }
     internal DbSet<DbPriceObservation> Prices { get; init; }
+    internal DbSet<DbPriceCheck> PriceChecks { get; init; }
     internal DbSet<DbRefreshVersion> Version { get; init; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,6 +32,10 @@ internal class Context(DbContextOptions<Context> options) : DbContext(options)
             .HasKey(p => p.Id);
         modelBuilder.Entity<DbPriceObservation>()
             .HasIndex(p => new { p.StoreId, p.Product, p.FetchedAt });
+
+        modelBuilder.Entity<DbPriceCheck>()
+            .ToTable("price_checks")
+            .HasKey(c => new { c.StoreId, c.Product });
 
         // Named "price_sync_versions", not "versions" - Services.POI's own `versions` table lives in
         // this same physical database now.
