@@ -94,11 +94,15 @@ builder.Services.AddHttpClient("FlareSolverr", c =>
         o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 
-// Shared with Services.POI - both services run with their own project directory as CWD, so this
-// resolves to the same file at the repo root for both.
+// Shared with Services.POI - both services run with their own project directory as CWD locally, so
+// this default resolves to the same file at the repo root for both. In docker-compose (separate
+// containers, no shared CWD) AppHost overrides this via the ConnectionStrings__MonberDb env var to
+// point both containers at a common bind-mounted volume instead.
+string connectionString = builder.Configuration.GetConnectionString("MonberDb") ?? "Data Source=../monber.db";
+
 builder.Services.AddDbContext<Context>(opts =>
 {
-    opts.UseSqlite("Data Source=../monber.db", sqlite => sqlite.MigrationsHistoryTable("__EFMigrationsHistory_Prices"));
+    opts.UseSqlite(connectionString, sqlite => sqlite.MigrationsHistoryTable("__EFMigrationsHistory_Prices"));
     opts.EnableSensitiveDataLogging();
     opts.EnableDetailedErrors();
 });

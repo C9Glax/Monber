@@ -1,6 +1,38 @@
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Docker.Resources.ComposeNodes;
+using Aspire.Hosting.Docker.Resources.ServiceNodes;
 
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
+
+// POI and Prices share one SQLite file (see the WaitFor(poi) comment below) via a plain relative
+// path when run locally with `dotnet run` from their own project directories. In docker-compose
+// they're separate containers with independent filesystems, so that trick can't work there - this
+// instead points both containers at the same bind-mounted host directory, running them as a fixed
+// non-root UID:GID so they can actually write into it (the bind-mounted directory is created by
+// Docker owned by whoever runs `docker compose up`, not the image's own app user).
+void ApplySharedDbVolume(IResourceBuilder<ProjectResource> resource)
+{
+    if (!builder.ExecutionContext.IsPublishMode)
+    {
+        // Local `dotnet run` orchestration has no /data directory - leave Program.cs's default
+        // "../monber.db" (shared via CWD) connection string untouched.
+        return;
+    }
+
+    resource
+        .WithEnvironment("ConnectionStrings__MonberDb", "Data Source=/data/monber.db")
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.User = "1000:1000";
+            service.Volumes.Add(new Volume
+            {
+                Name = "monber-db",
+                Type = "bind",
+                Source = "./data",
+                Target = "/data",
+            });
+        });
+}
 
 // Docker Compose publish target: `aspire publish` emits deploy/docker-compose.yaml wiring every
 // resource together. Every project resource is a "requires image build" resource as far as Aspire
@@ -15,6 +47,7 @@ builder.AddDockerComposeEnvironment("monber");
 // (see OverpassSyncHealthCheck in Services.POI).
 IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI>("services-poi")
     .WithHttpHealthCheck("/health");
+ApplySharedDbVolume(poi);
 
 // REWE sits behind Cloudflare; Services.Prices solves the challenge via FlareSolverr
 // (https://github.com/FlareSolverr/FlareSolverr), which Aspire runs as its own container here so
@@ -35,6 +68,7 @@ IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_
     .WithEnvironment("FlareSolverr__Url", flaresolverr.GetEndpoint("http"))
     .WaitFor(flaresolverr)
     .WaitFor(poi);
+ApplySharedDbVolume(prices);
 
 // The MapTiler key is never committed to source (*.key is gitignored). Read it from
 // MonberAPI.AppHost/MAPTILER_API.key if present, else Parameters:maptiler-api-key config
