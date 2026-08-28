@@ -32,6 +32,10 @@ builder.Services.AddSingleton<OverpassSyncStatus>();
 builder.Services.AddHealthChecks()
     .AddCheck<OverpassSyncHealthCheck>("overpass-sync");
 
+// Forces a re-sync every 24h while the process keeps running - the startup sync above and
+// POST /stores/update only run once each, respecting the freshness check inside LoadStores.
+builder.Services.AddHostedService<OverpassSyncBackgroundService>();
+
 WebApplication app = builder.Build();
 
 app.MapDefaultEndpoints();

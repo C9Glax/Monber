@@ -75,11 +75,11 @@ internal static class OverpassDataFetcher
         return await response.Content.ReadFromJsonAsync<ResponseStruct>(ct);
     }
 
-    internal static async Task LoadStores(Context context, ILogger logger, CancellationToken ct)
+    internal static async Task LoadStores(Context context, ILogger logger, CancellationToken ct, bool force = false)
     {
         logger.LogInformation("Starting Overpass store sync...");
 
-        if (await context.Version.AnyAsync(ct))
+        if (!force && await context.Version.AnyAsync(ct))
         {
             if (await context.Version.ToListAsync(ct) is not { Count: >0 } versions)
             {

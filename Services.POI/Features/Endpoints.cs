@@ -6,6 +6,6 @@ internal static class Endpoints
     {
         builder.MapGet("/stores", GetStoresEndpoint.Handle);
         
-        builder.MapPost("/stores/update", GetStoresEndpoint.Handle);
+        builder.MapPost("/stores/update", PostUpdateStoresEndpoint.Handle);
     }
 }
