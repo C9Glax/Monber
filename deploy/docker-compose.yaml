@@ -1,0 +1,86 @@
+services:
+  monber-dashboard:
+    image: "mcr.microsoft.com/dotnet/nightly/aspire-dashboard:latest"
+    ports:
+      - "18888"
+    expose:
+      - "18889"
+      - "18890"
+    networks:
+      - "aspire"
+    restart: "always"
+  services-poi:
+    image: "${SERVICES_POI_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SERVICES_POI_PORT}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "services-poi"
+    expose:
+      - "${SERVICES_POI_PORT}"
+    networks:
+      - "aspire"
+  flaresolverr:
+    image: "ghcr.io/flaresolverr/flaresolverr:latest"
+    expose:
+      - "8191"
+    networks:
+      - "aspire"
+  services-prices:
+    image: "${SERVICES_PRICES_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${SERVICES_PRICES_PORT}"
+      FlareSolverr__Url: "http://flaresolverr:8191"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "services-prices"
+    expose:
+      - "${SERVICES_PRICES_PORT}"
+    depends_on:
+      flaresolverr:
+        condition: "service_started"
+      services-poi:
+        condition: "service_started"
+    networks:
+      - "aspire"
+  frontend:
+    image: "${FRONTEND_IMAGE}"
+    environment:
+      NUXT_PUBLIC_MAP_TILER_KEY: ""
+    expose:
+      - "3000"
+    networks:
+      - "aspire"
+  gateway:
+    image: "${GATEWAY_IMAGE}"
+    environment:
+      OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      HTTP_PORTS: "${GATEWAY_PORT}"
+      SERVICES_POI_HTTP: "http://services-poi:${SERVICES_POI_PORT}"
+      services__services-poi__http__0: "http://services-poi:${SERVICES_POI_PORT}"
+      SERVICES_POI_HTTPS: "https://services-poi:${SERVICES_POI_PORT}"
+      SERVICES_PRICES_HTTP: "http://services-prices:${SERVICES_PRICES_PORT}"
+      services__services-prices__http__0: "http://services-prices:${SERVICES_PRICES_PORT}"
+      SERVICES_PRICES_HTTPS: "https://services-prices:${SERVICES_PRICES_PORT}"
+      FRONTEND_HTTP: "http://frontend:3000"
+      services__frontend__http__0: "http://frontend:3000"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+      OTEL_SERVICE_NAME: "gateway"
+    ports:
+      - "${GATEWAY_PORT}"
+    depends_on:
+      services-poi:
+        condition: "service_started"
+      services-prices:
+        condition: "service_started"
+    networks:
+      - "aspire"
+networks:
+  aspire:
+    driver: "bridge"
