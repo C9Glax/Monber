@@ -21,7 +21,8 @@ internal static class OverpassDataFetcher
         "HIT",
         "EDEKA",
         "Lidl",
-        "ALDI",
+        "Aldi Nord",
+        "Aldi Süd",
         "Penny"
     };
 

@@ -32,6 +32,41 @@ builder.Services.AddHttpClient(nameof(KauflandPriceFetcher))
         c.DefaultRequestHeaders.Referrer = new Uri("https://filiale.kaufland.de/service/kontakt.store.html");
     });
 
+// HIT selects a store via a Set-Cookie: mein-markt=<id> cookie (see HitPriceFetcher) - same shape as
+// Kaufland's session cookie, so it needs the same per-client CookieContainer to carry it across requests.
+builder.Services.AddHttpClient(nameof(HitPriceFetcher))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { CookieContainer = new CookieContainer() })
+    .ConfigureHttpClient(c =>
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (X11; Linux x86_64; rv:154.0) Gecko/20100101 Firefox/154.0"));
+
+builder.Services.AddHttpClient(nameof(NettoPriceFetcher));
+builder.Services.AddHttpClient(nameof(PennyPriceFetcher));
+
+// EDEKA, Lidl and Aldi Süd's store discovery goes through Overpass/OSM (see each fetcher's doc-comment),
+// same as Rewe's - Overpass queries run up to 60s server-side, so these need Rewe's longer timeout too.
+builder.Services.AddHttpClient(nameof(EdekaPriceFetcher))
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
+builder.Services.AddHttpClient(nameof(LidlPriceFetcher))
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
+builder.Services.AddHttpClient(nameof(AldiNordPriceFetcher));
+builder.Services.AddHttpClient(nameof(AldiSuedPriceFetcher))
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
+        o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(100);
+        o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
+    });
+
 // REWE sits behind Cloudflare; FlareSolverr (configured via FlareSolverr:Url, e.g. FlareSolverr__Url env
 // var) solves the challenge and hands ReweePriceFetcher real cookies/UA to replay on this plain client.
 // Both clients need a longer timeout than the service-wide default resilience handler allows: Overpass

@@ -41,30 +41,57 @@ internal static class StoreSync
                 // services' startup syncs are racing) - retry next run instead of marking fresh for 24h.
                 continue;
 
-            foreach (ChainStore store in stores)
+            try
             {
-                if (store.Latitude is not { } lat || store.Longitude is not { } lon)
-                    continue;
+                DbStoreExternalId[] existingMappings = await ctx.StoreExternalIds
+                    .Where(e => e.Brand == fetcher.Brand)
+                    .ToArrayAsync(ct);
+                Dictionary<string, DbStoreExternalId> existingByExternalId = existingMappings.ToDictionary(e => e.ExternalStoreId);
 
-                long? matchedStoreId = PoiStoreMatching.FindNearest(candidates, lat, lon);
-                if (matchedStoreId is not { } storeId)
-                    continue;
+                // StoreId carries a global unique constraint (one external mapping per shared store), but a
+                // chain's own store list can list two entries at the same physical location that both
+                // nearest-match the same POI store (confirmed live: HIT's main market and its attached
+                // beverage sub-shop share an address) - the first match in a run claims that StoreId, the
+                // rest are skipped rather than failing the whole batch.
+                HashSet<long> claimedStoreIds = [.. existingMappings.Select(e => e.StoreId)];
 
-                DbStoreExternalId? existing = await ctx.StoreExternalIds.SingleOrDefaultAsync(
-                    e => e.Brand == fetcher.Brand && e.ExternalStoreId == store.ExternalStoreId, ct);
+                foreach (ChainStore store in stores)
+                {
+                    if (store.Latitude is not { } lat || store.Longitude is not { } lon)
+                        continue;
 
-                if (existing is null)
-                    ctx.StoreExternalIds.Add(new DbStoreExternalId(fetcher.Brand, store.ExternalStoreId, storeId));
-                else if (existing.StoreId != storeId)
-                    ctx.Entry(existing).CurrentValues.SetValues(existing with { StoreId = storeId });
+                    long? matchedStoreId = PoiStoreMatching.FindNearest(candidates, lat, lon);
+                    if (matchedStoreId is not { } storeId)
+                        continue;
+
+                    existingByExternalId.TryGetValue(store.ExternalStoreId, out DbStoreExternalId? existing);
+                    if (existing is not null && existing.StoreId == storeId)
+                        continue; // Already mapped to this store.
+
+                    if (claimedStoreIds.Contains(storeId))
+                        continue; // Another external id already claimed this shared store in this run.
+
+                    if (existing is null)
+                        ctx.StoreExternalIds.Add(new DbStoreExternalId(fetcher.Brand, store.ExternalStoreId, storeId));
+                    else
+                        ctx.Entry(existing).CurrentValues.SetValues(existing with { StoreId = storeId });
+
+                    claimedStoreIds.Add(storeId);
+                }
+
+                if (version is null)
+                    ctx.Version.Add(new DbRefreshVersion(fetcher.Brand, DateTimeOffset.UtcNow));
+                else
+                    ctx.Entry(version).CurrentValues.SetValues(version with { LastRefreshedAt = DateTimeOffset.UtcNow });
+
+                await ctx.SaveChangesAsync(ct);
             }
-
-            if (version is null)
-                ctx.Version.Add(new DbRefreshVersion(fetcher.Brand, DateTimeOffset.UtcNow));
-            else
-                ctx.Entry(version).CurrentValues.SetValues(version with { LastRefreshedAt = DateTimeOffset.UtcNow });
-
-            await ctx.SaveChangesAsync(ct);
+            catch (Exception)
+            {
+                // A broken chain adapter (bad data, transient DB conflict) shouldn't block the others
+                // from syncing or crash the whole background sync task - see Program.cs's Task.Run.
+                ctx.ChangeTracker.Clear();
+            }
         }
     }
 }
