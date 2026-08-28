@@ -16,6 +16,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="Aspire.Hosting.Docker" Version="13.4.6" />
       <PackageReference Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
       <PackageReference Include="Scalar.Aspire" Version="0.11.11" />
     </ItemGroup>
