@@ -44,7 +44,7 @@ jobs:
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
           -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-poi
-          -p:ContainerImageTags="${{ github.sha }} latest"
+          -p:ContainerImageTag=${{ github.sha }}
 
       - name: Build and push Services.Prices image
         run: >
@@ -52,7 +52,7 @@ jobs:
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
           -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-prices
-          -p:ContainerImageTags="${{ github.sha }} latest"
+          -p:ContainerImageTag=${{ github.sha }}
 
       - name: Build and push Gateway image
         run: >
@@ -60,7 +60,19 @@ jobs:
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
           -p:ContainerRepository=${{ env.REPOSITORY }}/monber-gateway
-          -p:ContainerImageTags="${{ github.sha }} latest"
+          -p:ContainerImageTag=${{ github.sha }}
+
+      # SDK container support's ContainerImageTags MSBuild property doesn't take a semicolon-
+      # delimited list cleanly from the command line (its validation rejects the raw ;-joined
+      # string before splitting it), so each service above is only pushed under its sha tag. Alias
+      # "latest" to it with a registry-side manifest copy instead of a second build.
+      - name: Tag .NET service images as latest
+        run: |
+          for image in monber-services-poi monber-services-prices monber-gateway; do
+            docker buildx imagetools create \
+              -t ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:latest \
+              ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:${{ github.sha }}
+          done
 
       # The Nuxt frontend has its own Dockerfile (frontend/Dockerfile) since it isn't a .NET
       # project and can't use SDK container support.
