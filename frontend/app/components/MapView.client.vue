@@ -11,7 +11,7 @@ const props = defineProps<{
   unpricedStores: MergedStore[]
 }>()
 
-const emit = defineEmits<{ locationClick: [lat: number, lon: number] }>()
+const emit = defineEmits<{ locationClick: [lat: number, lon: number], storeSelect: [id: number] }>()
 
 const mapEl = ref<HTMLDivElement | null>(null)
 let L: typeof import('leaflet')
@@ -49,6 +49,11 @@ async function paintMarkers(refit: boolean) {
     marker.bindPopup(
       `<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>${eur(store.low)} · ${store.pack} · ${store.dist.toFixed(1)} km`,
     )
+    marker.on('click', () => {
+      selectedId = store.id
+      emit('storeSelect', store.id)
+      paintMarkers(false)
+    })
     marker.addTo(markerLayer)
   }
 
@@ -58,6 +63,11 @@ async function paintMarkers(refit: boolean) {
       icon: L.divIcon({ className: '', iconSize: [9, 9], iconAnchor: [4, 4], html: '<div class="mb-empty"></div>' }),
     })
     marker.bindPopup(`<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>No price data yet`)
+    marker.on('click', () => {
+      selectedId = store.id
+      emit('storeSelect', store.id)
+      paintMarkers(false)
+    })
     marker.addTo(markerLayer)
   }
 

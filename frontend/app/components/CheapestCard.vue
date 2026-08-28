@@ -14,7 +14,7 @@ const savings = computed(() => {
   return `€${(props.areaAvg - props.best.low).toFixed(2)} under area average`
 })
 
-const priceLabel = computed(() => (props.best ? eur(props.best.low) : '--,--'))
+const priceLabel = computed(() => eur(props.best?.low))
 const storeLabel = computed(() => props.best?.brand ?? 'no data')
 const distLabel = computed(() => (props.best ? `${props.best.dist.toFixed(1)} km` : 'no data'))
 

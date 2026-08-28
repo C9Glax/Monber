@@ -51,7 +51,7 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
 }
 
 export function eur(v: number | null | undefined): string {
-  return v == null ? '—' : `€${v.toFixed(2)}`
+  return v == null ? '€-.--' : `€${v.toFixed(2)}`
 }
 
 export function ago(iso: string | null): string {
@@ -191,5 +191,5 @@ export function useStorePrices() {
     return merged.value.filter((store) => store.dist <= radiusKm && store.perCanPrice == null)
   }
 
-  return { pois, observations, loading, error, merged, refresh, inRange, inRangeFuture, unpricedInRange }
+  return { pois, observations, loading, error, merged, mergedFuture, refresh, inRange, inRangeFuture, unpricedInRange }
 }
