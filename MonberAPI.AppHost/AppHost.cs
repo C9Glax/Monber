@@ -8,8 +8,32 @@ IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(ar
 // path when run locally with `dotnet run` from their own project directories. In docker-compose
 // they're separate containers with independent filesystems, so that trick can't work there - this
 // instead points both containers at the same bind-mounted host directory, running them as a fixed
-// non-root UID:GID so they can actually write into it (the bind-mounted directory is created by
-// Docker owned by whoever runs `docker compose up`, not the image's own app user).
+// non-root UID:GID so they can actually write into it.
+//
+// The bind-mounted directory itself is *not* reliably owned by that UID: Docker Engine runs as
+// root and auto-creates a missing bind-mount source directory owned by root:root, regardless of
+// which host user ran `docker compose up` - so a plain `user: "1000:1000"` on the app containers
+// still hits SQLite Error 14 ("unable to open database file") on a fresh deploy. dataInit below is
+// a one-shot root container that chowns ./data to 1000:1000 before either app container starts, so
+// ownership no longer depends on who created the directory or what UID they happen to have.
+IResourceBuilder<ContainerResource>? dataInit = null;
+if (builder.ExecutionContext.IsPublishMode)
+{
+    dataInit = builder.AddContainer("data-init", "busybox", "latest")
+        .WithEntrypoint("sh")
+        .WithArgs("-c", "chown 1000:1000 /data")
+        .PublishAsDockerComposeService((_, service) =>
+        {
+            service.Volumes.Add(new Volume
+            {
+                Name = "monber-db",
+                Type = "bind",
+                Source = "./data",
+                Target = "/data",
+            });
+        });
+}
+
 void ApplySharedDbVolume(IResourceBuilder<ProjectResource> resource)
 {
     if (!builder.ExecutionContext.IsPublishMode)
@@ -21,6 +45,7 @@ void ApplySharedDbVolume(IResourceBuilder<ProjectResource> resource)
 
     resource
         .WithEnvironment("ConnectionStrings__MonberDb", "Data Source=/data/monber.db")
+        .WaitForCompletion(dataInit!)
         .PublishAsDockerComposeService((_, service) =>
         {
             service.User = "1000:1000";
