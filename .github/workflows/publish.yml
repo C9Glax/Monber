@@ -120,3 +120,17 @@ jobs:
         with:
           commit_message: "chore: regenerate docker-compose.yaml [skip ci]"
           file_pattern: deploy/*
+
+      # Rolling draft release so deploy/docker-compose.yaml + deploy/.env are downloadable without
+      # cloning the repo. Kept as a draft deliberately - re-running this step updates the same
+      # draft's assets/tag in place, but it only becomes visible/public once someone publishes it
+      # manually from the Releases tab.
+      - name: Draft latest release with deploy assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          draft: true
+          files: |
+            deploy/docker-compose.yaml
+            deploy/.env
