@@ -15,11 +15,17 @@ services:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "${SERVICES_POI_PORT}"
+      ConnectionStrings__MonberDb: "Data Source=/data/monber.db"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "services-poi"
     expose:
       - "${SERVICES_POI_PORT}"
+    volumes:
+      - type: "bind"
+        target: "/data"
+        source: "./data"
+    user: "1000:1000"
     networks:
       - "aspire"
   flaresolverr:
@@ -35,16 +41,22 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "${SERVICES_PRICES_PORT}"
       FlareSolverr__Url: "http://flaresolverr:8191"
+      ConnectionStrings__MonberDb: "Data Source=/data/monber.db"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "services-prices"
     expose:
       - "${SERVICES_PRICES_PORT}"
+    volumes:
+      - type: "bind"
+        target: "/data"
+        source: "./data"
     depends_on:
       flaresolverr:
         condition: "service_started"
       services-poi:
         condition: "service_started"
+    user: "1000:1000"
     networks:
       - "aspire"
   frontend:
