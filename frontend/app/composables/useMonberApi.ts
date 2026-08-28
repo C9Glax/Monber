@@ -33,10 +33,10 @@ export function pricesUrl(lat: number, lon: number): string {
   return `${apiBase()}/prices/prices?lat=${lat}&lon=${lon}`
 }
 
-export async function fetchPoiStores(lat: number, lon: number): Promise<PoiStore[]> {
-  return await $fetch<PoiStore[]>(poiStoresUrl(lat, lon))
+export async function fetchPoiStores(lat: number, lon: number, signal?: AbortSignal): Promise<PoiStore[]> {
+  return await $fetch<PoiStore[]>(poiStoresUrl(lat, lon), { signal })
 }
 
-export async function fetchPrices(lat: number, lon: number): Promise<PriceObservation[]> {
-  return await $fetch<PriceObservation[]>(pricesUrl(lat, lon))
+export async function fetchPrices(lat: number, lon: number, signal?: AbortSignal): Promise<PriceObservation[]> {
+  return await $fetch<PriceObservation[]>(pricesUrl(lat, lon), { signal })
 }
