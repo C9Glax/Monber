@@ -67,6 +67,12 @@ internal static class PriceLookup
                         "Fetched {Count} live prices for {Brand} store {StoreId}",
                         live.Length, store.Brand, store.StoreId);
                 }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    // Genuine caller cancellation (e.g. the client changed location) - propagate
+                    // instead of treating it as a per-store fetch failure to fall back from.
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     // Fall through and serve whatever was already cached for this store.

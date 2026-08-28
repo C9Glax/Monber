@@ -136,23 +136,33 @@ export function useStorePrices() {
   const error = ref<string | null>(null)
   const lastQuery = ref<{ lat: number, lon: number } | null>(null)
 
+  // Not reactive state - just tracks which call is the latest, so a superseded location change
+  // can abort its own request and be ignored if it somehow still resolves.
+  let activeController: AbortController | null = null
+
   async function refresh(lat: number, lon: number) {
+    activeController?.abort()
+    const controller = new AbortController()
+    activeController = controller
+
     loading.value = true
     error.value = null
     lastQuery.value = { lat, lon }
     try {
       const [poiResult, priceResult] = await Promise.all([
-        fetchPoiStores(lat, lon),
-        fetchPrices(lat, lon),
+        fetchPoiStores(lat, lon, controller.signal),
+        fetchPrices(lat, lon, controller.signal),
       ])
+      if (controller.signal.aborted) return
       pois.value = poiResult
       observations.value = priceResult
     }
     catch {
+      if (controller.signal.aborted) return
       error.value = 'Could not reach the POI/Prices services.'
     }
     finally {
-      loading.value = false
+      if (activeController === controller) loading.value = false
     }
   }
 
