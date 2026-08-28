@@ -13,7 +13,7 @@ const locating = ref(false)
 const geocoding = ref(false)
 const geocodeError = ref<string | null>(null)
 
-const { loading, error, refresh, inRange, inRangeFuture, unpricedInRange } = useStorePrices()
+const { loading, error, merged, mergedFuture, refresh, inRange, inRangeFuture, unpricedInRange } = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
 
@@ -23,6 +23,11 @@ const unpricedStores = computed(() => unpricedInRange(radiusKm.value))
 
 const best = computed(() => rangeStores.value[0] ?? null)
 const futureBest = computed(() => futureRangeStores.value[0] ?? null)
+
+const selectedStoreId = ref<number | null>(null)
+const selectedCurrent = computed(() => merged.value.find((s) => s.id === selectedStoreId.value) ?? null)
+const selectedFuture = computed(() => mergedFuture.value.find((s) => s.id === selectedStoreId.value) ?? null)
+
 const areaAvg = computed(() => {
   const lows = rangeStores.value.map((s) => s.low)
   if (lows.length === 0) return null
@@ -40,8 +45,18 @@ function showFutureBestOnMap() {
   if (futureBest.value) mapView.value?.focus(futureBest.value)
 }
 
-function selectStore(store: { lat: number, lon: number }) {
+function selectStore(store: { id: number, lat: number, lon: number }) {
+  selectedStoreId.value = store.id
   mapView.value?.focus(store)
+}
+
+function onStoreMarkerSelect(id: number) {
+  selectedStoreId.value = id
+}
+
+function showSelectedOnMap() {
+  const store = selectedCurrent.value ?? selectedFuture.value
+  if (store) mapView.value?.focus(store)
 }
 
 function onMapLocationClick(clickLat: number, clickLon: number) {
@@ -101,6 +116,7 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
       :stores="rangeStores"
       :unpriced-stores="unpricedStores"
       @location-click="onMapLocationClick"
+      @store-select="onStoreMarkerSelect"
     />
 
     <div class="overlay">
@@ -124,6 +140,7 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
         <template v-else>
           <CheapestCard :best="best" :area-avg="areaAvg" @show="showBestOnMap" />
           <FutureLowestCard :best="futureBest" @show="showFutureBestOnMap" />
+          <SelectedStoreCard :current="selectedCurrent" :future="selectedFuture" @show="showSelectedOnMap" />
           <StoreList :rows="rangeStores" :area-avg="areaAvg" @select="selectStore" />
         </template>
 
