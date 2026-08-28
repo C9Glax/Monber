@@ -9,6 +9,19 @@ services:
     networks:
       - "aspire"
     restart: "always"
+  data-init:
+    image: "busybox:latest"
+    command:
+      - "-c"
+      - "chown 1000:1000 /data"
+    entrypoint:
+      - "sh"
+    volumes:
+      - type: "bind"
+        target: "/data"
+        source: "./data"
+    networks:
+      - "aspire"
   services-poi:
     image: "${SERVICES_POI_IMAGE}"
     environment:
@@ -25,6 +38,9 @@ services:
       - type: "bind"
         target: "/data"
         source: "./data"
+    depends_on:
+      data-init:
+        condition: "service_completed_successfully"
     user: "1000:1000"
     networks:
       - "aspire"
@@ -56,6 +72,8 @@ services:
         condition: "service_started"
       services-poi:
         condition: "service_started"
+      data-init:
+        condition: "service_completed_successfully"
     user: "1000:1000"
     networks:
       - "aspire"
