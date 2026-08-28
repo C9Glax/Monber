@@ -69,15 +69,27 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
                 !props.TryGetProperty("offerData", out JsonElement offerData))
                 continue;
 
-            // Kaufland's weekly-offer search only ever returns a generic "MONSTER / Energy Drink" entry
-            // (no flavor or pack-size breakdown), so matching is brand-level: a hit means "Monster is on
-            // this week's flyer for this store", not "this exact pack size is confirmed in stock" - every
-            // tracked pack size resolves to the same flyer price when Monster has an offer.
+            // Kaufland's search endpoint ignores the query string entirely - confirmed live: searching for
+            // each of the three tracked pack sizes returns the same small fixed set of generic offers
+            // (whatever loosely matches "Monster" that week: toys, batteries, and at most one real
+            // "MONSTER / Energy Drink" entry), just reordered. That one real entry's `unit` field (e.g.
+            // "je 0,5-l-Dose") is the only place the pack size it actually covers is stated - Kaufland's
+            // flyer has so far never carried a multi-pack (4x/10x) Monster offer, only single 0.5 L cans.
+            // So a tracked product only gets a price when its own pack-size suffix (the trailing
+            // "0,5l"/"4x0,5l"-style token, same convention ReweePriceFetcher uses) matches the offer's
+            // `unit`-derived pack size exactly - matching every product to whichever generic offer merely
+            // contains "Monster" would (and did) misattribute the single-can price to the 4-pack/10-pack.
             //
             // The same search response also mixes in next week's flyer once it's published - a
             // dateFrom in the future - so each matching offer is dated instead of just taking the first
             // hit: an offer already covering today is a current price, one starting later is a future
             // price (see ChainPrice.EffectiveFrom), and anything already expired is ignored.
+            string? productPackSize = PackSizeSuffixRegex().Match(product) is { Success: true } productSizeMatch
+                ? productSizeMatch.Value
+                : null;
+            if (productPackSize is null)
+                continue;
+
             DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
             bool foundCurrent = false, foundFuture = false;
             foreach (JsonElement offer in offerData.EnumerateArray())
@@ -86,7 +98,19 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
                     break;
 
                 string? title = offer.TryGetProperty("title", out JsonElement t) ? t.GetString() : null;
-                if (title is null || !product.Contains(title, StringComparison.OrdinalIgnoreCase))
+                string? subtitle = offer.TryGetProperty("subtitle", out JsonElement st) ? st.GetString() : null;
+                if (title is not "MONSTER" || subtitle is null ||
+                    !subtitle.Contains("Energy Drink", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string? unit = offer.TryGetProperty("unit", out JsonElement u) ? u.GetString() : null;
+                Match unitSizeMatch = unit is null ? Match.Empty : UnitPackSizeRegex().Match(unit);
+                if (!unitSizeMatch.Success)
+                    continue;
+                string offerPackSize = unitSizeMatch.Groups["qty"].Success
+                    ? $"{unitSizeMatch.Groups["qty"].Value}x{unitSizeMatch.Groups["vol"].Value}l"
+                    : $"{unitSizeMatch.Groups["vol"].Value}l";
+                if (!offerPackSize.Equals(productPackSize, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 if (!offer.TryGetProperty("price", out JsonElement priceEl) || !priceEl.TryGetDecimal(out decimal price))
@@ -126,6 +150,12 @@ internal partial class KauflandPriceFetcher(HttpClient client) : IChainPriceFetc
 
     [GeneratedRegex(@"window\.SSR\['[^']+'\]\s*=\s*(\{.*?\})\s*;?\s*</script>", RegexOptions.Singleline)]
     private static partial Regex SsrBlobRegex();
+
+    [GeneratedRegex(@"\d+(?:x\d+,\d+l|,\d+l)$")]
+    private static partial Regex PackSizeSuffixRegex();
+
+    [GeneratedRegex(@"(?:(?<qty>\d+)x)?(?<vol>\d+,\d+)-l")]
+    private static partial Regex UnitPackSizeRegex();
 
     [method: JsonConstructor]
     private record StoreDto(
