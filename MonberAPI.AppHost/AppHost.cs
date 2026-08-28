@@ -8,13 +8,24 @@ IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(ar
 IResourceBuilder<ProjectResource> poi = builder.AddProject<Projects.Services_POI>("services-poi")
     .WithHttpHealthCheck("/health");
 
+// REWE sits behind Cloudflare; Services.Prices solves the challenge via FlareSolverr
+// (https://github.com/FlareSolverr/FlareSolverr), which Aspire runs as its own container here so
+// no separately-managed instance is needed. Its dynamically-assigned endpoint is handed to
+// services-prices as FlareSolverr__Url, the same config key ReweePriceFetcher already reads.
+IResourceBuilder<ContainerResource> flaresolverr = builder
+    .AddContainer("flaresolverr", "ghcr.io/flaresolverr/flaresolverr", "latest")
+    .WithHttpEndpoint(targetPort: 8191, name: "http");
+
 // Prices' own startup store sync (see StoreSyncStatus) matches chain stores against the shared
 // `stores` table that POI owns - if it ran before POI's Overpass sync populated that table, every
 // brand would be skipped with no DbStoreExternalId rows ever written until someone manually hits
 // POST /update-stores again. WaitFor(poi) holds this service's own startup back until POI is healthy,
-// so its first (and normally only) sync attempt actually has stores to match against.
+// so its first (and normally only) sync attempt actually has stores to match against. WaitFor(flaresolverr)
+// similarly holds it back until the FlareSolverr container is running.
 IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_Prices>("services-prices")
     .WithHttpHealthCheck("/health")
+    .WithEnvironment("FlareSolverr__Url", flaresolverr.GetEndpoint("http"))
+    .WaitFor(flaresolverr)
     .WaitFor(poi);
 
 // The MapTiler key is never committed to source (*.key is gitignored). Read it from
