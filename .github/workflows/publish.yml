@@ -43,7 +43,7 @@ jobs:
           dotnet publish Services.POI/Services.POI.csproj -c Release
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
-          -p:ContainerRepository=${{ env.REPOSITORY }}/services-poi
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-poi
           -p:ContainerImageTags="${{ github.sha }} latest"
 
       - name: Build and push Services.Prices image
@@ -51,7 +51,7 @@ jobs:
           dotnet publish Services.Prices/Services.Prices.csproj -c Release
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
-          -p:ContainerRepository=${{ env.REPOSITORY }}/services-prices
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-prices
           -p:ContainerImageTags="${{ github.sha }} latest"
 
       - name: Build and push Gateway image
@@ -59,7 +59,7 @@ jobs:
           dotnet publish MonberAPI.Gateway/MonberAPI.Gateway.csproj -c Release
           -p:PublishProfile=DefaultContainer
           -p:ContainerRegistry=${{ env.REGISTRY }}
-          -p:ContainerRepository=${{ env.REPOSITORY }}/gateway
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-gateway
           -p:ContainerImageTags="${{ github.sha }} latest"
 
       # The Nuxt frontend has its own Dockerfile (frontend/Dockerfile) since it isn't a .NET
@@ -70,8 +70,8 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/frontend:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/frontend:latest
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:latest
 
       - name: Install Aspire CLI
         run: curl -sSL https://aspire.dev/install.sh | bash -s -- --version 13.4.6 --quality release
@@ -85,13 +85,13 @@ jobs:
       - name: Write image references and ports
         run: |
           cat > deploy/.env <<EOF
-          SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/services-poi:${{ github.sha }}
+          SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}
           SERVICES_POI_PORT=8080
-          SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/services-prices:${{ github.sha }}
+          SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}
           SERVICES_PRICES_PORT=8080
-          GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/gateway:${{ github.sha }}
+          GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}
           GATEWAY_PORT=8080
-          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/frontend:${{ github.sha }}
+          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
           EOF
 
       - name: Commit deploy/ back to main
