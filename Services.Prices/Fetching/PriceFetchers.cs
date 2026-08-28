@@ -12,12 +12,13 @@ internal static class PriceFetchers
         List<IChainPriceFetcher> fetchers =
         [
             new KauflandPriceFetcher(httpClientFactory.CreateClient(nameof(KauflandPriceFetcher))),
-            new NettoPriceFetcher(),
-            new HitPriceFetcher(),
-            new EdekaPriceFetcher(),
-            new LidlPriceFetcher(),
-            new AldiPriceFetcher(),
-            new PennyPriceFetcher(),
+            new NettoPriceFetcher(httpClientFactory.CreateClient(nameof(NettoPriceFetcher))),
+            new HitPriceFetcher(httpClientFactory.CreateClient(nameof(HitPriceFetcher))),
+            new EdekaPriceFetcher(httpClientFactory.CreateClient(nameof(EdekaPriceFetcher))),
+            new LidlPriceFetcher(httpClientFactory.CreateClient(nameof(LidlPriceFetcher))),
+            new AldiNordPriceFetcher(httpClientFactory.CreateClient(nameof(AldiNordPriceFetcher))),
+            new AldiSuedPriceFetcher(httpClientFactory.CreateClient(nameof(AldiSuedPriceFetcher))),
+            new PennyPriceFetcher(httpClientFactory.CreateClient(nameof(PennyPriceFetcher))),
         ];
 
         if (flareSolverrConfigured)

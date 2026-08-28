@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MonberAPI is a .NET 10 / ASP.NET Core Aspire solution made up of two independent minimal-API microservices orchestrated by an Aspire AppHost:
 
-- `Services.POI` — points-of-interest service. Stores German grocery store locations (Kaufland, Rewe, Netto, HIT, EDEKA, Lidl, ALDI, Penny) fetched from the Overpass API (OpenStreetMap) and persisted in a local SQLite database (`stores.db`), queried by geographic radius.
+- `Services.POI` — points-of-interest service. Stores German grocery store locations (Kaufland, Rewe, Netto, HIT, EDEKA, Lidl, Aldi Nord, Aldi Süd, Penny) fetched from the Overpass API (OpenStreetMap) and persisted in a local SQLite database (`stores.db`), queried by geographic radius.
 - `Services.Prices` — a stub service with the endpoint-mapping scaffolding in place but no endpoints implemented yet.
 
 Shared cross-cutting concerns (OpenTelemetry, health checks, service discovery, HTTP resilience) live in `MonberAPI.ServiceDefaults` and are wired into every service via `builder.AddServiceDefaults()`.
