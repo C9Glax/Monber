@@ -2,6 +2,14 @@ using Aspire.Hosting.ApplicationModel;
 
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
+// Docker Compose publish target: `aspire publish` emits deploy/docker-compose.yaml wiring every
+// resource together. Every project resource is a "requires image build" resource as far as Aspire
+// is concerned, so the compose file references each one by an externally-supplied ${..._IMAGE} env
+// var rather than a literal tag - the GitHub Actions workflow builds+pushes the actual images to
+// GHCR and writes deploy/.env with the real ghcr.io/... references. AddDockerComposeEnvironment is
+// a no-op outside publish mode, so it's safe to always add.
+builder.AddDockerComposeEnvironment("monber");
+
 // WithHttpHealthCheck lets the gateway's WaitFor below block on more than just "process started" -
 // for POI in particular, /health only turns healthy once the startup Overpass store sync finishes
 // (see OverpassSyncHealthCheck in Services.POI).
@@ -39,17 +47,33 @@ string mapTilerApiKey = File.Exists(mapTilerKeyFile)
     ? File.ReadAllText(mapTilerKeyFile).Trim()
     : builder.Configuration["Parameters:maptiler-api-key"] ?? "";
 
-// npm run dev requires node_modules to already be present, so install dependencies first and
-// have the dev server wait for that to finish rather than failing on a fresh checkout.
-IResourceBuilder<ExecutableResource> frontendInstall = builder.AddExecutable("frontend-npm-install", "npm", "../frontend", "install")
-    .ExcludeFromManifest();
+// Locally (dotnet run) the frontend runs as a plain `npm run dev` process. For docker-compose
+// publish it's instead represented as a Dockerfile-backed resource (frontend/Dockerfile, a
+// production Nuxt build) so Aspire treats it the same as the .NET projects - image build required,
+// referenced via ${FRONTEND_IMAGE} in the generated compose file - even though the actual image is
+// built and pushed to GHCR by the GitHub Actions workflow, not by `aspire publish` itself.
+IResourceBuilder<IResourceWithEndpoints> frontend;
+if (builder.ExecutionContext.IsPublishMode)
+{
+    frontend = builder.AddDockerfile("frontend", "../frontend")
+        .WithHttpEndpoint(targetPort: 3000)
+        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
+}
+else
+{
+    // npm run dev requires node_modules to already be present, so install dependencies first and
+    // have the dev server wait for that to finish rather than failing on a fresh checkout.
+    IResourceBuilder<ExecutableResource> frontendInstall = builder.AddExecutable("frontend-npm-install", "npm", "../frontend", "install")
+        .ExcludeFromManifest();
 
-var frontend = builder.AddNpmApp("frontend", "../frontend", "dev")
-    .WaitForCompletion(frontendInstall)
-    .WithHttpEndpoint(env: "PORT", targetPort: 3000)
-    .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
+    IResourceBuilder<NodeAppResource> frontendDev = builder.AddNpmApp("frontend", "../frontend", "dev")
+        .WaitForCompletion(frontendInstall)
+        .WithHttpEndpoint(env: "PORT", targetPort: 3000)
+        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
 
-frontendInstall.WithParentRelationship(frontend);
+    frontendInstall.WithParentRelationship(frontendDev);
+    frontend = frontendDev;
+}
 
 // The gateway is the single external entry point: it serves the UI (proxied through to the
 // frontend dev server) and the /poi and /prices APIs, all on one origin. WaitFor holds it back
@@ -58,7 +82,7 @@ frontendInstall.WithParentRelationship(frontend);
 builder.AddProject<Projects.MonberAPI_Gateway>("gateway")
     .WithReference(poi)
     .WithReference(prices)
-    .WithReference(frontend)
+    .WithReference(frontend.GetEndpoint("http"))
     .WaitFor(poi)
     .WaitFor(prices)
     .WithExternalHttpEndpoints();

@@ -1,0 +1,110 @@
+name: Publish images and compose
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'deploy/**'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  REPOSITORY: c9glax
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The three .NET services are containerized via the .NET SDK's built-in container support
+      # (dotnet publish /t:PublishContainer) - no Dockerfile needed for these.
+      - name: Build and push Services.POI image
+        run: >
+          dotnet publish Services.POI/Services.POI.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-poi
+          -p:ContainerImageTags="${{ github.sha }} latest"
+
+      - name: Build and push Services.Prices image
+        run: >
+          dotnet publish Services.Prices/Services.Prices.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-prices
+          -p:ContainerImageTags="${{ github.sha }} latest"
+
+      - name: Build and push Gateway image
+        run: >
+          dotnet publish MonberAPI.Gateway/MonberAPI.Gateway.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-gateway
+          -p:ContainerImageTags="${{ github.sha }} latest"
+
+      # The Nuxt frontend has its own Dockerfile (frontend/Dockerfile) since it isn't a .NET
+      # project and can't use SDK container support.
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:latest
+
+      - name: Install Aspire CLI
+        run: curl -sSL https://aspire.dev/install.sh | bash -s -- --version 13.4.6 --quality release
+
+      # `aspire publish` only lays out deploy/docker-compose.yaml + a deploy/.env template with
+      # blank ${..._IMAGE}/${..._PORT} placeholders - it doesn't build or push anything itself, so
+      # the actual values (matching the images just pushed above) are filled in below.
+      #
+      # The MapTiler key isn't a secret - it's a public key restricted by allowed HTTP
+      # Origin/Referer on MapTiler's side (see https://cloud.maptiler.com/account/), which the
+      # browser sets automatically from the page's real URL. It's fine for it to end up baked into
+      # the committed compose file. Configure it as a repo *variable* (Settings > Secrets and
+      # variables > Actions > Variables), not a secret; falls back to plain OSM tiles if unset,
+      # same as local dev.
+      - name: Generate docker-compose.yaml
+        env:
+          Parameters__maptiler-api-key: ${{ vars.MAPTILER_API_KEY }}
+        run: aspire publish --project MonberAPI.AppHost -o deploy --non-interactive
+
+      - name: Write image references and ports
+        run: |
+          cat > deploy/.env <<EOF
+          SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}
+          SERVICES_POI_PORT=8080
+          SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}
+          SERVICES_PRICES_PORT=8080
+          GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}
+          GATEWAY_PORT=8080
+          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
+          EOF
+
+      - name: Commit deploy/ back to main
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: regenerate docker-compose.yaml [skip ci]"
+          file_pattern: deploy/*
