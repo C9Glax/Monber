@@ -103,7 +103,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "gateway"
     ports:
-      - "${GATEWAY_PORT}"
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
     depends_on:
       services-poi:
         condition: "service_started"

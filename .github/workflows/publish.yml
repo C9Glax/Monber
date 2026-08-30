@@ -103,6 +103,11 @@ jobs:
       # configured per-deployment without rebuilding/republishing the compose file. Configure it as
       # a repo *variable* (Settings > Secrets and variables > Actions > Variables), not a secret;
       # falls back to plain OSM tiles if unset, same as local dev.
+      # `aspire publish` emits the gateway's host port mapping as the Compose short-syntax single
+      # value `- "${GATEWAY_PORT}"`, which Compose treats as "publish this container port to a
+      # random host port" (no host part given) rather than a fixed host:container mapping. Rewrite
+      # it to "${GATEWAY_PORT}:${GATEWAY_PORT}" so the host port set in deploy/.env is actually
+      # honored.
       - name: Bake image tags and internal ports into docker-compose.yaml
         run: |
           sed -i \
@@ -113,6 +118,7 @@ jobs:
             -e "s|\${GATEWAY_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}|g" \
             -e "s|\${FRONTEND_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}|g" \
             -e 's|NUXT_PUBLIC_MAP_TILER_KEY: ""|NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"|' \
+            -e 's|- "\${GATEWAY_PORT}"|- "${GATEWAY_PORT}:${GATEWAY_PORT}"|' \
             deploy/docker-compose.yaml
 
           cat > deploy/.env <<EOF
