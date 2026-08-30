@@ -88,31 +88,36 @@ jobs:
       - name: Install Aspire CLI
         run: curl -sSL https://aspire.dev/install.sh | bash -s -- --version 13.4.6
 
-      # `aspire publish` only lays out deploy/docker-compose.yaml + a deploy/.env template with
-      # blank ${..._IMAGE}/${..._PORT} placeholders - it doesn't build or push anything itself, so
-      # the actual values (matching the images just pushed above) are filled in below.
-      #
-      # The MapTiler key isn't a secret - it's a public key restricted by allowed HTTP
-      # Origin/Referer on MapTiler's side (see https://cloud.maptiler.com/account/), which the
-      # browser sets automatically from the page's real URL. It's fine for it to end up baked into
-      # the committed compose file. Configure it as a repo *variable* (Settings > Secrets and
-      # variables > Actions > Variables), not a secret; falls back to plain OSM tiles if unset,
-      # same as local dev.
+      # `aspire publish` lays out deploy/docker-compose.yaml with ${..._IMAGE}/${..._PORT}
+      # placeholders for every "requires image build" resource - it doesn't build or push anything
+      # itself. Only GATEWAY_PORT is meant to stay a runtime-configurable env var (it's the only
+      # port actually exposed to the host); every other placeholder is baked into the compose file
+      # with a literal value below so deploy/.env only needs GATEWAY_PORT and MAPTILER_API_KEY.
       - name: Generate docker-compose.yaml
-        env:
-          Parameters__maptiler-api-key: ${{ vars.MAPTILER_API_KEY }}
         run: aspire publish --project MonberAPI.AppHost -o deploy --non-interactive
 
-      - name: Write image references and ports
+      # The MapTiler key isn't a secret - it's a public key restricted by allowed HTTP
+      # Origin/Referer on MapTiler's side (see https://cloud.maptiler.com/account/), which the
+      # browser sets automatically from the page's real URL. It's still kept as a deploy/.env
+      # variable (rather than baked into the compose file like the image tags) so it can be
+      # configured per-deployment without rebuilding/republishing the compose file. Configure it as
+      # a repo *variable* (Settings > Secrets and variables > Actions > Variables), not a secret;
+      # falls back to plain OSM tiles if unset, same as local dev.
+      - name: Bake image tags and internal ports into docker-compose.yaml
         run: |
+          sed -i \
+            -e "s|\${SERVICES_POI_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}|g" \
+            -e "s|\${SERVICES_POI_PORT}|8080|g" \
+            -e "s|\${SERVICES_PRICES_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}|g" \
+            -e "s|\${SERVICES_PRICES_PORT}|8080|g" \
+            -e "s|\${GATEWAY_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}|g" \
+            -e "s|\${FRONTEND_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}|g" \
+            -e 's|NUXT_PUBLIC_MAP_TILER_KEY: ""|NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"|' \
+            deploy/docker-compose.yaml
+
           cat > deploy/.env <<EOF
-          SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}
-          SERVICES_POI_PORT=8080
-          SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}
-          SERVICES_PRICES_PORT=8080
-          GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}
           GATEWAY_PORT=8080
-          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
+          MAPTILER_API_KEY=${{ vars.MAPTILER_API_KEY }}
           EOF
 
       - name: Commit deploy/ back to main

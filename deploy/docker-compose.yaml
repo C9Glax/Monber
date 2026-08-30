@@ -23,17 +23,17 @@ services:
     networks:
       - "aspire"
   services-poi:
-    image: "${SERVICES_POI_IMAGE}"
+    image: "ghcr.io/c9glax/monber-services-poi:af6deff35a7dbacff2d18ce6be1407a25def6563"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      HTTP_PORTS: "${SERVICES_POI_PORT}"
+      HTTP_PORTS: "8080"
       ConnectionStrings__MonberDb: "Data Source=/data/monber.db"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "services-poi"
     expose:
-      - "${SERVICES_POI_PORT}"
+      - "8080"
     volumes:
       - type: "bind"
         target: "/data"
@@ -51,18 +51,18 @@ services:
     networks:
       - "aspire"
   services-prices:
-    image: "${SERVICES_PRICES_IMAGE}"
+    image: "ghcr.io/c9glax/monber-services-prices:af6deff35a7dbacff2d18ce6be1407a25def6563"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
-      HTTP_PORTS: "${SERVICES_PRICES_PORT}"
+      HTTP_PORTS: "8080"
       FlareSolverr__Url: "http://flaresolverr:8191"
       ConnectionStrings__MonberDb: "Data Source=/data/monber.db"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
       OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
       OTEL_SERVICE_NAME: "services-prices"
     expose:
-      - "${SERVICES_PRICES_PORT}"
+      - "8080"
     volumes:
       - type: "bind"
         target: "/data"
@@ -78,25 +78,25 @@ services:
     networks:
       - "aspire"
   frontend:
-    image: "${FRONTEND_IMAGE}"
+    image: "ghcr.io/c9glax/monber-frontend:af6deff35a7dbacff2d18ce6be1407a25def6563"
     environment:
-      NUXT_PUBLIC_MAP_TILER_KEY: ""
+      NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"
     expose:
       - "3000"
     networks:
       - "aspire"
   gateway:
-    image: "${GATEWAY_IMAGE}"
+    image: "ghcr.io/c9glax/monber-gateway:af6deff35a7dbacff2d18ce6be1407a25def6563"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "${GATEWAY_PORT}"
-      SERVICES_POI_HTTP: "http://services-poi:${SERVICES_POI_PORT}"
-      services__services-poi__http__0: "http://services-poi:${SERVICES_POI_PORT}"
-      SERVICES_POI_HTTPS: "https://services-poi:${SERVICES_POI_PORT}"
-      SERVICES_PRICES_HTTP: "http://services-prices:${SERVICES_PRICES_PORT}"
-      services__services-prices__http__0: "http://services-prices:${SERVICES_PRICES_PORT}"
-      SERVICES_PRICES_HTTPS: "https://services-prices:${SERVICES_PRICES_PORT}"
+      SERVICES_POI_HTTP: "http://services-poi:8080"
+      services__services-poi__http__0: "http://services-poi:8080"
+      SERVICES_POI_HTTPS: "https://services-poi:8080"
+      SERVICES_PRICES_HTTP: "http://services-prices:8080"
+      services__services-prices__http__0: "http://services-prices:8080"
+      SERVICES_PRICES_HTTPS: "https://services-prices:8080"
       FRONTEND_HTTP: "http://frontend:3000"
       services__frontend__http__0: "http://frontend:3000"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://monber-dashboard:18889"
