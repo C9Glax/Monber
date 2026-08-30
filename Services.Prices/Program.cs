@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using MonberAPI.ServiceDefaults;
 using Scalar.AspNetCore;
@@ -45,7 +46,14 @@ builder.Services.AddHttpClient(nameof(PennyPriceFetcher));
 
 // EDEKA, Lidl and Aldi Süd's store discovery goes through Overpass/OSM (see each fetcher's doc-comment),
 // same as Rewe's - Overpass queries run up to 60s server-side, so these need Rewe's longer timeout too.
+//
+// RemoveAllResilienceHandlers() is required before AddStandardResilienceHandler() here: AddServiceDefaults
+// already put a default standard resilience handler (10s attempt / 30s total) on every named HttpClient via
+// ConfigureHttpClientDefaults, and without removing it first, AddStandardResilienceHandler stacks a second
+// handler around it rather than replacing it - the outer default's 30s cap would still apply and silently
+// override the 100s below (confirmed live: Overpass calls were timing out at 30s despite this config).
 builder.Services.AddHttpClient(nameof(EdekaPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -53,6 +61,7 @@ builder.Services.AddHttpClient(nameof(EdekaPriceFetcher))
         o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 builder.Services.AddHttpClient(nameof(LidlPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -61,6 +70,7 @@ builder.Services.AddHttpClient(nameof(LidlPriceFetcher))
     });
 builder.Services.AddHttpClient(nameof(AldiNordPriceFetcher));
 builder.Services.AddHttpClient(nameof(AldiSuedPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -70,11 +80,12 @@ builder.Services.AddHttpClient(nameof(AldiSuedPriceFetcher))
 
 // REWE sits behind Cloudflare; FlareSolverr (configured via FlareSolverr:Url, e.g. FlareSolverr__Url env
 // var) solves the challenge and hands ReweePriceFetcher real cookies/UA to replay on this plain client.
-// Both clients need a longer timeout than the service-wide default resilience handler allows: Overpass
-// queries (store discovery) run up to 60s server-side, and a FlareSolverr challenge solve can take nearly
-// as long since it drives a real browser.
+// Both clients need a longer timeout than the service-wide default resilience handler allows (see the
+// RemoveAllResilienceHandlers() note above): Overpass queries (store discovery) run up to 60s server-side,
+// and a FlareSolverr challenge solve can take nearly as long since it drives a real browser.
 builder.Services.AddHttpClient(nameof(ReweePriceFetcher))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false })
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -88,6 +99,7 @@ builder.Services.AddHttpClient("FlareSolverr", c =>
 })
     // Registered unconditionally so DI resolves even when unused - PriceFetchers only actually creates a
     // client from it (and thus dials this address) when FlareSolverrOptions.IsConfigured is true.
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
