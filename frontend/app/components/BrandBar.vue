@@ -1,5 +1,6 @@
 <template>
   <div class="brand-bar">
+    <img src="/can.svg" alt="" class="brand-icon">
     <span class="brand-monber">Monber</span>
     <span class="brand-api">API</span>
     <span class="brand-tag">energy-drink can prices<br>nationwide</span>
@@ -20,6 +21,11 @@
   background: color-mix(in srgb, var(--color-bg) 82%, transparent);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-md);
+}
+.brand-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 .brand-monber {
   font-family: var(--font-heading);
