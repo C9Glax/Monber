@@ -23,7 +23,7 @@ services:
     networks:
       - "aspire"
   services-poi:
-    image: "ghcr.io/c9glax/monber-services-poi:4d7d5db03280efb5c5ebc86affefbe3f4e26eb3c"
+    image: "ghcr.io/c9glax/monber-services-poi:da31ae621a6b34af82673b3c4a469c2e4dc94474"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
@@ -51,7 +51,7 @@ services:
     networks:
       - "aspire"
   services-prices:
-    image: "ghcr.io/c9glax/monber-services-prices:4d7d5db03280efb5c5ebc86affefbe3f4e26eb3c"
+    image: "ghcr.io/c9glax/monber-services-prices:da31ae621a6b34af82673b3c4a469c2e4dc94474"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
@@ -78,7 +78,7 @@ services:
     networks:
       - "aspire"
   frontend:
-    image: "ghcr.io/c9glax/monber-frontend:4d7d5db03280efb5c5ebc86affefbe3f4e26eb3c"
+    image: "ghcr.io/c9glax/monber-frontend:da31ae621a6b34af82673b3c4a469c2e4dc94474"
     environment:
       NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"
     expose:
@@ -86,7 +86,7 @@ services:
     networks:
       - "aspire"
   gateway:
-    image: "ghcr.io/c9glax/monber-gateway:4d7d5db03280efb5c5ebc86affefbe3f4e26eb3c"
+    image: "ghcr.io/c9glax/monber-gateway:da31ae621a6b34af82673b3c4a469c2e4dc94474"
     environment:
       OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY: "in_memory"
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
