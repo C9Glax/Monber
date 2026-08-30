@@ -4,6 +4,10 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- RemoveAllResilienceHandlers() (Program.cs) is still marked experimental upstream but is the
+             documented way to override AddServiceDefaults' default per-client resilience handler instead
+             of stacking a second one on top of it. -->
+        <NoWarn>$(NoWarn);EXTEXP0001</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using MonberAPI.ServiceDefaults;
 using Scalar.AspNetCore;
@@ -45,7 +46,14 @@ builder.Services.AddHttpClient(nameof(PennyPriceFetcher));
 
 // EDEKA, Lidl and Aldi Süd's store discovery goes through Overpass/OSM (see each fetcher's doc-comment),
 // same as Rewe's - Overpass queries run up to 60s server-side, so these need Rewe's longer timeout too.
+//
+// RemoveAllResilienceHandlers() is required before AddStandardResilienceHandler() here: AddServiceDefaults
+// already put a default standard resilience handler (10s attempt / 30s total) on every named HttpClient via
+// ConfigureHttpClientDefaults, and without removing it first, AddStandardResilienceHandler stacks a second
+// handler around it rather than replacing it - the outer default's 30s cap would still apply and silently
+// override the 100s below (confirmed live: Overpass calls were timing out at 30s despite this config).
 builder.Services.AddHttpClient(nameof(EdekaPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -53,6 +61,7 @@ builder.Services.AddHttpClient(nameof(EdekaPriceFetcher))
         o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(180);
     });
 builder.Services.AddHttpClient(nameof(LidlPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -61,6 +70,7 @@ builder.Services.AddHttpClient(nameof(LidlPriceFetcher))
     });
 builder.Services.AddHttpClient(nameof(AldiNordPriceFetcher));
 builder.Services.AddHttpClient(nameof(AldiSuedPriceFetcher))
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -70,11 +80,12 @@ builder.Services.AddHttpClient(nameof(AldiSuedPriceFetcher))
 
 // REWE sits behind Cloudflare; FlareSolverr (configured via FlareSolverr:Url, e.g. FlareSolverr__Url env
 // var) solves the challenge and hands ReweePriceFetcher real cookies/UA to replay on this plain client.
-// Both clients need a longer timeout than the service-wide default resilience handler allows: Overpass
-// queries (store discovery) run up to 60s server-side, and a FlareSolverr challenge solve can take nearly
-// as long since it drives a real browser.
+// Both clients need a longer timeout than the service-wide default resilience handler allows (see the
+// RemoveAllResilienceHandlers() note above): Overpass queries (store discovery) run up to 60s server-side,
+// and a FlareSolverr challenge solve can take nearly as long since it drives a real browser.
 builder.Services.AddHttpClient(nameof(ReweePriceFetcher))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseCookies = false })
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -88,6 +99,7 @@ builder.Services.AddHttpClient("FlareSolverr", c =>
 })
     // Registered unconditionally so DI resolves even when unused - PriceFetchers only actually creates a
     // client from it (and thus dials this address) when FlareSolverrOptions.IsConfigured is true.
+    .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o =>
     {
         o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(90);
@@ -139,18 +151,41 @@ await using (AsyncServiceScope migrationScope = app.Services.CreateAsyncScope())
 // Chain adapters (REWE in particular, via FlareSolverr) can each take up to ~100s to time out when
 // their upstream is unreachable. Running this in the background - rather than awaiting it here - keeps
 // the service from taking minutes to start listening whenever FlareSolverr or a chain endpoint is down.
+//
+// Runs on a loop, not just once at startup: docker-compose only waits for Services.POI's container to
+// have *started*, not for its own Overpass sync to finish populating the shared `stores` table (there's
+// no compose-level healthcheck to gate on). A brand POI hasn't synced yet at the moment this runs simply
+// has 0 candidate rows that pass - see StoreSync's 0-candidates branch - and a one-shot run would leave
+// that brand's price lookups permanently broken until someone manually hit POST /stores/update. Retrying
+// periodically lets a lost startup race self-heal on the next tick instead.
 _ = Task.Run(async () =>
 {
-    await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
-    Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
-    IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-    ILogger<Program> storeSyncLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        PeriodicTimer timer = new(TimeSpan.FromMinutes(15));
+        bool startupSyncDone = false;
+        do
+        {
+            await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
+            Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
+            IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+            ILogger<Program> storeSyncLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    await StoreSync.RunAsync(
-        ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
-        storeSyncLogger, CancellationToken.None);
+            await StoreSync.RunAsync(
+                ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
+                storeSyncLogger, app.Lifetime.ApplicationStopping);
 
-    app.Services.GetRequiredService<StoreSyncStatus>().MarkComplete();
+            if (!startupSyncDone)
+            {
+                app.Services.GetRequiredService<StoreSyncStatus>().MarkComplete();
+                startupSyncDone = true;
+            }
+        } while (await timer.WaitForNextTickAsync(app.Lifetime.ApplicationStopping));
+    }
+    catch (OperationCanceledException)
+    {
+        // Expected on graceful shutdown (ApplicationStopping fired) - nothing to clean up.
+    }
 });
 
 app.Run();
