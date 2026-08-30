@@ -1,4 +1,8 @@
-# MonberAPI
+<img src="frontend/public/can.svg" width="28" height="28" align="left" alt="">
+
+# Monber
+
+[![Publish images and compose](https://github.com/C9Glax/Monber/actions/workflows/publish.yml/badge.svg)](https://github.com/C9Glax/Monber/actions/workflows/publish.yml)
 
 Monber tracks German grocery prices by store location: it maps points-of-interest (grocery
 stores, from OpenStreetMap) and the prices tracked at those stores (scraped from each chain's
