@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MonberAPI.PoiData.Database;
 using Services.Prices.Database;
 using Services.Prices.Fetching;
@@ -16,7 +17,7 @@ internal static class StoreSync
 {
     private const int FreshnessHours = 24;
 
-    internal static async Task RunAsync(Context ctx, IChainPriceFetcher[] fetchers, CancellationToken ct)
+    internal static async Task RunAsync(Context ctx, IChainPriceFetcher[] fetchers, ILogger logger, CancellationToken ct)
     {
         foreach (IChainPriceFetcher fetcher in fetchers)
         {
@@ -29,17 +30,32 @@ internal static class StoreSync
             {
                 stores = await fetcher.DiscoverStoresAsync(ct);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // A broken chain adapter shouldn't block the others from syncing.
+                logger.LogWarning(ex, "Store discovery failed for {Brand}; skipping this run", fetcher.Brand);
+                continue;
+            }
+
+            if (stores.Length == 0)
+            {
+                // Either the chain returned no stores, or every one was filtered out while parsing the
+                // response (e.g. a required field the adapter expects went missing) - either way this is
+                // worth surfacing since it silently means zero prices for this brand.
+                logger.LogWarning("{Brand} store discovery returned 0 usable stores", fetcher.Brand);
                 continue;
             }
 
             DbStore[] candidates = await ctx.Stores.Where(s => s.Brand == fetcher.Brand).ToArrayAsync(ct);
             if (candidates.Length == 0)
+            {
                 // Services.POI hasn't synced this brand's stores into the shared table yet (e.g. both
                 // services' startup syncs are racing) - retry next run instead of marking fresh for 24h.
+                logger.LogWarning(
+                    "{Brand} discovered {DiscoveredCount} stores but Services.POI has no shared-table rows for this brand yet",
+                    fetcher.Brand, stores.Length);
                 continue;
+            }
 
             try
             {
@@ -55,18 +71,28 @@ internal static class StoreSync
                 // rest are skipped rather than failing the whole batch.
                 HashSet<long> claimedStoreIds = [.. existingMappings.Select(e => e.StoreId)];
 
+                int matched = 0, noNearbyPoiStore = 0, noCoordinates = 0;
                 foreach (ChainStore store in stores)
                 {
                     if (store.Latitude is not { } lat || store.Longitude is not { } lon)
+                    {
+                        noCoordinates++;
                         continue;
+                    }
 
                     long? matchedStoreId = PoiStoreMatching.FindNearest(candidates, lat, lon);
                     if (matchedStoreId is not { } storeId)
+                    {
+                        noNearbyPoiStore++;
                         continue;
+                    }
 
                     existingByExternalId.TryGetValue(store.ExternalStoreId, out DbStoreExternalId? existing);
                     if (existing is not null && existing.StoreId == storeId)
+                    {
+                        matched++;
                         continue; // Already mapped to this store.
+                    }
 
                     if (claimedStoreIds.Contains(storeId))
                         continue; // Another external id already claimed this shared store in this run.
@@ -77,7 +103,13 @@ internal static class StoreSync
                         ctx.Entry(existing).CurrentValues.SetValues(existing with { StoreId = storeId });
 
                     claimedStoreIds.Add(storeId);
+                    matched++;
                 }
+
+                logger.LogInformation(
+                    "{Brand} store sync: {Discovered} discovered, {Candidates} candidate POI stores, {Matched} matched, " +
+                    "{NoNearbyPoiStore} with no POI store within match threshold, {NoCoordinates} missing coordinates",
+                    fetcher.Brand, stores.Length, candidates.Length, matched, noNearbyPoiStore, noCoordinates);
 
                 if (version is null)
                     ctx.Version.Add(new DbRefreshVersion(fetcher.Brand, DateTimeOffset.UtcNow));
@@ -86,10 +118,11 @@ internal static class StoreSync
 
                 await ctx.SaveChangesAsync(ct);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // A broken chain adapter (bad data, transient DB conflict) shouldn't block the others
                 // from syncing or crash the whole background sync task - see Program.cs's Task.Run.
+                logger.LogWarning(ex, "Store matching failed for {Brand}; skipping this run", fetcher.Brand);
                 ctx.ChangeTracker.Clear();
             }
         }

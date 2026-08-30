@@ -95,16 +95,24 @@ IResourceBuilder<ProjectResource> prices = builder.AddProject<Projects.Services_
     .WaitFor(poi);
 ApplySharedDbVolume(prices);
 
-// The MapTiler key is never committed to source (*.key is gitignored). Read it from
-// MonberAPI.AppHost/MAPTILER_API.key if present, else Parameters:maptiler-api-key config
-// (e.g. `dotnet user-secrets set Parameters:maptiler-api-key <key> --project MonberAPI.AppHost`),
-// else fall back to empty - read directly rather than via AddParameter (which throws and takes
-// the whole resource down when unset) so the frontend still starts and falls back to plain OSM
-// tiles until a key is configured.
+// The MapTiler key is never baked into the published compose file - it's a per-deployment value.
+// Locally (dotnet run) it still resolves from MonberAPI.AppHost/MAPTILER_API.key (gitignored, see
+// *.key in .gitignore) or Parameters:maptiler-api-key config/user-secrets, falling back to empty
+// (MapView.client.vue falls back to plain OSM tiles when unset). Using AddParameter's Func<string>
+// overload rather than a plain string means this resolver only runs when something actually needs
+// the value (e.g. setting the npm dev process's env var) - in docker-compose publish mode it's
+// never invoked at all: Aspire instead emits a NUXT_PUBLIC_MAP_TILER_KEY=${MAPTILER_API_KEY}
+// reference in docker-compose.yaml plus a blank MAPTILER_API_KEY= placeholder line in deploy/.env,
+// so CI never needs the key and each deployer fills in their own before `docker compose up`.
 string mapTilerKeyFile = Path.Combine(builder.AppHostDirectory, "MAPTILER_API.key");
-string mapTilerApiKey = File.Exists(mapTilerKeyFile)
-    ? File.ReadAllText(mapTilerKeyFile).Trim()
-    : builder.Configuration["Parameters:maptiler-api-key"] ?? "";
+IResourceBuilder<ParameterResource> mapTilerKeyParam = builder.AddParameter(
+    "maptiler-api-key",
+    () => File.Exists(mapTilerKeyFile)
+        ? File.ReadAllText(mapTilerKeyFile).Trim()
+        : builder.Configuration["Parameters:maptiler-api-key"] ?? "",
+    publishValueAsDefault: false,
+    secret: false)
+    .WithDescription("MapTiler API key for the basemap tiles (https://cloud.maptiler.com/). Leave empty to fall back to plain OpenStreetMap tiles.");
 
 // Locally (dotnet run) the frontend runs as a plain `npm run dev` process. For docker-compose
 // publish it's instead represented as a Dockerfile-backed resource (frontend/Dockerfile, a
@@ -116,7 +124,7 @@ if (builder.ExecutionContext.IsPublishMode)
 {
     frontend = builder.AddDockerfile("frontend", "../frontend")
         .WithHttpEndpoint(targetPort: 3000)
-        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
+        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerKeyParam);
 }
 else
 {
@@ -128,7 +136,7 @@ else
     IResourceBuilder<NodeAppResource> frontendDev = builder.AddNpmApp("frontend", "../frontend", "dev")
         .WaitForCompletion(frontendInstall)
         .WithHttpEndpoint(env: "PORT", targetPort: 3000)
-        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerApiKey);
+        .WithEnvironment("NUXT_PUBLIC_MAP_TILER_KEY", mapTilerKeyParam);
 
     frontendInstall.WithParentRelationship(frontendDev);
     frontend = frontendDev;
