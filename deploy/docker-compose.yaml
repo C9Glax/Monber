@@ -80,7 +80,7 @@ services:
   frontend:
     image: "${FRONTEND_IMAGE}"
     environment:
-      NUXT_PUBLIC_MAP_TILER_KEY: ""
+      NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"
     expose:
       - "3000"
     networks:

@@ -92,28 +92,28 @@ jobs:
       # blank ${..._IMAGE}/${..._PORT} placeholders - it doesn't build or push anything itself, so
       # the actual values (matching the images just pushed above) are filled in below.
       #
-      # The MapTiler key isn't a secret - it's a public key restricted by allowed HTTP
-      # Origin/Referer on MapTiler's side (see https://cloud.maptiler.com/account/), which the
-      # browser sets automatically from the page's real URL. It's fine for it to end up baked into
-      # the committed compose file. Configure it as a repo *variable* (Settings > Secrets and
-      # variables > Actions > Variables), not a secret; falls back to plain OSM tiles if unset,
-      # same as local dev.
+      # The MapTiler key is deliberately NOT supplied here (see AppHost.cs's mapTilerKeyParam): it's
+      # a per-deployment value, never baked into the compose file or committed to source. Aspire
+      # instead emits a NUXT_PUBLIC_MAP_TILER_KEY=${MAPTILER_API_KEY} reference in docker-compose.yaml
+      # plus a blank `MAPTILER_API_KEY=` placeholder line in deploy/.env for whoever runs
+      # `docker compose up` to fill in with their own key (or leave empty for plain OSM tiles).
       - name: Generate docker-compose.yaml
-        env:
-          Parameters__maptiler-api-key: ${{ vars.MAPTILER_API_KEY }}
         run: aspire publish --project MonberAPI.AppHost -o deploy --non-interactive
 
+      # sed -i rather than `cat >` so the MAPTILER_API_KEY= placeholder aspire publish just wrote
+      # into deploy/.env (along with its explanatory comment) survives - a wholesale overwrite here
+      # would silently drop it every time this workflow runs.
       - name: Write image references and ports
         run: |
-          cat > deploy/.env <<EOF
-          SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}
-          SERVICES_POI_PORT=8080
-          SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}
-          SERVICES_PRICES_PORT=8080
-          GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}
-          GATEWAY_PORT=8080
-          FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
-          EOF
+          sed -i \
+            -e "s|^SERVICES_POI_IMAGE=.*|SERVICES_POI_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:${{ github.sha }}|" \
+            -e "s|^SERVICES_POI_PORT=.*|SERVICES_POI_PORT=8080|" \
+            -e "s|^SERVICES_PRICES_IMAGE=.*|SERVICES_PRICES_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:${{ github.sha }}|" \
+            -e "s|^SERVICES_PRICES_PORT=.*|SERVICES_PRICES_PORT=8080|" \
+            -e "s|^GATEWAY_IMAGE=.*|GATEWAY_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:${{ github.sha }}|" \
+            -e "s|^GATEWAY_PORT=.*|GATEWAY_PORT=8080|" \
+            -e "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}|" \
+            deploy/.env
 
       - name: Commit deploy/ back to main
         uses: stefanzweifel/git-auto-commit-action@v5
