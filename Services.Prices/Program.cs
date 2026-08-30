@@ -139,18 +139,41 @@ await using (AsyncServiceScope migrationScope = app.Services.CreateAsyncScope())
 // Chain adapters (REWE in particular, via FlareSolverr) can each take up to ~100s to time out when
 // their upstream is unreachable. Running this in the background - rather than awaiting it here - keeps
 // the service from taking minutes to start listening whenever FlareSolverr or a chain endpoint is down.
+//
+// Runs on a loop, not just once at startup: docker-compose only waits for Services.POI's container to
+// have *started*, not for its own Overpass sync to finish populating the shared `stores` table (there's
+// no compose-level healthcheck to gate on). A brand POI hasn't synced yet at the moment this runs simply
+// has 0 candidate rows that pass - see StoreSync's 0-candidates branch - and a one-shot run would leave
+// that brand's price lookups permanently broken until someone manually hit POST /stores/update. Retrying
+// periodically lets a lost startup race self-heal on the next tick instead.
 _ = Task.Run(async () =>
 {
-    await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
-    Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
-    IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-    ILogger<Program> storeSyncLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        PeriodicTimer timer = new(TimeSpan.FromMinutes(15));
+        bool startupSyncDone = false;
+        do
+        {
+            await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
+            Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
+            IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+            ILogger<Program> storeSyncLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    await StoreSync.RunAsync(
-        ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
-        storeSyncLogger, CancellationToken.None);
+            await StoreSync.RunAsync(
+                ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
+                storeSyncLogger, app.Lifetime.ApplicationStopping);
 
-    app.Services.GetRequiredService<StoreSyncStatus>().MarkComplete();
+            if (!startupSyncDone)
+            {
+                app.Services.GetRequiredService<StoreSyncStatus>().MarkComplete();
+                startupSyncDone = true;
+            }
+        } while (await timer.WaitForNextTickAsync(app.Lifetime.ApplicationStopping));
+    }
+    catch (OperationCanceledException)
+    {
+        // Expected on graceful shutdown (ApplicationStopping fired) - nothing to clean up.
+    }
 });
 
 app.Run();
