@@ -18,8 +18,23 @@ internal static class PriceLookup
         Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
         PricedStore[] stores, string[] products, ILogger logger, CancellationToken ct)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
         List<PriceObservation> results = [];
+        await foreach (PriceStreamEvent evt in StreamPricesAsync(ctx, fetchersByBrand, stores, products, logger, ct))
+            results.AddRange(evt.Observations);
+        return [.. results];
+    }
+
+    /// <summary>
+    /// Same lookup as <see cref="GetPricesAsync"/>, but yields one <see cref="PriceStreamEvent"/> per
+    /// store as soon as that store is resolved, instead of buffering every store's result until all of
+    /// them are done - lets a caller (e.g. a streaming HTTP endpoint) surface prices progressively.
+    /// </summary>
+    internal static async IAsyncEnumerable<PriceStreamEvent> StreamPricesAsync(
+        Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
+        PricedStore[] stores, string[] products, ILogger logger,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
 
         foreach (PricedStore store in stores)
         {
@@ -82,13 +97,13 @@ internal static class PriceLookup
                 }
             }
 
-            results.AddRange(existing
+            PriceObservation[] resolved = [.. existing
                 // Group by (Product, EffectiveFrom), not just Product - a current and a future price for
                 // the same product are both valid, distinct rows and must not collapse into one.
                 .GroupBy(p => (p.Product, p.EffectiveFrom))
-                .Select(g => g.OrderByDescending(p => p.FetchedAt).First().ToDto(store)));
-        }
+                .Select(g => g.OrderByDescending(p => p.FetchedAt).First().ToDto(store))];
 
-        return [.. results];
+            yield return new PriceStreamEvent(store.StoreId, resolved.Length > 0, resolved);
+        }
     }
 }

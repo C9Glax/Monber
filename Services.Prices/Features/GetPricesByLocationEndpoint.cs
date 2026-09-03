@@ -1,4 +1,5 @@
-using Microsoft.AspNetCore.Http.HttpResults;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,8 +15,14 @@ internal abstract class GetPricesByLocationEndpoint
 {
     private const float Radius = 10;
 
-    public static async Task<Ok<PriceObservation[]>> Handle(
-        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
+    /// <summary>
+    /// Streams one NDJSON <see cref="PriceStreamEvent"/> line per nearby store as soon as that store's
+    /// prices are resolved, rather than buffering the whole (potentially slow, per-store live-fetch)
+    /// result before responding - lets the client show stores immediately and fill in prices as they
+    /// arrive instead of blocking on the slowest store in range.
+    /// </summary>
+    public static async Task Handle(
+        HttpResponse response, Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
         ILogger<GetPricesByLocationEndpoint> logger,
         [FromQuery(Name = "lat")] float lat, [FromQuery(Name = "lon")] float lon,
         CancellationToken ct)
@@ -50,8 +57,13 @@ internal abstract class GetPricesByLocationEndpoint
 
         Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
             httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
-        PriceObservation[] result = await PriceLookup.GetPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct);
 
-        return TypedResults.Ok(result);
+        response.ContentType = "application/x-ndjson";
+        await foreach (PriceStreamEvent evt in PriceLookup.StreamPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct))
+        {
+            await JsonSerializer.SerializeAsync(response.Body, evt, cancellationToken: ct);
+            await response.Body.WriteAsync("\n"u8.ToArray(), ct);
+            await response.Body.FlushAsync(ct);
+        }
     }
 }

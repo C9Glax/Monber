@@ -120,5 +120,7 @@ body {
 .mb-pin.best { background: #968ae0; border-color: #d2cefd; color: #1b1830; font-weight: 600; }
 .mb-pin.selected { box-shadow: 0 0 0 3px rgba(145,132,217,.55), 0 2px 10px rgba(0,0,0,.6); transform: scale(1.12); }
 .mb-empty { width: 9px; height: 9px; border-radius: 999px; background: rgba(41,43,49,.75); border: 1.5px dashed #595d6c; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.mb-pending { width: 12px; height: 12px; border-radius: 999px; border: 2px solid rgba(145,132,217,.3); border-top-color: #9184d9; animation: mb-spin .8s linear infinite; }
+@keyframes mb-spin { to { transform: rotate(360deg); } }
 .mb-scroll::-webkit-scrollbar { width: 6px; }
 .mb-scroll::-webkit-scrollbar-thumb { background: #3f424d; border-radius: 999px; }

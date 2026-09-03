@@ -5,6 +5,7 @@ import { ago, eur } from '../composables/useStorePrices'
 const props = defineProps<{
   best: RangedStore | null
   areaAvg: number | null
+  pricesLoading?: boolean
 }>()
 
 const emit = defineEmits<{ show: [] }>()
@@ -14,9 +15,10 @@ const savings = computed(() => {
   return `€${(props.areaAvg - props.best.low).toFixed(2)} under area average`
 })
 
-const priceLabel = computed(() => eur(props.best?.low))
-const storeLabel = computed(() => props.best?.brand ?? 'no data')
-const distLabel = computed(() => (props.best ? `${props.best.dist.toFixed(1)} km` : 'no data'))
+const searching = computed(() => !props.best && !!props.pricesLoading)
+const priceLabel = computed(() => (searching.value ? '…' : eur(props.best?.low)))
+const storeLabel = computed(() => props.best?.brand ?? (searching.value ? 'searching…' : 'no data'))
+const distLabel = computed(() => (props.best ? `${props.best.dist.toFixed(1)} km` : searching.value ? 'searching…' : 'no data'))
 
 const glowStyle = computed(() => ({
   position: 'absolute' as const,
