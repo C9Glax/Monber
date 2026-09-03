@@ -15,6 +15,11 @@ internal abstract class GetPricesByLocationEndpoint
 {
     private const float Radius = 10;
 
+    // Matches the camelCase convention every other endpoint gets for free via minimal APIs'
+    // TypedResults.Ok<T> - this endpoint writes to the response body directly, bypassing that,
+    // so it needs its own JsonSerializerOptions to keep the wire format consistent.
+    private static readonly JsonSerializerOptions StreamJsonOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
     /// Streams one NDJSON <see cref="PriceStreamEvent"/> line per nearby store as soon as that store's
     /// prices are resolved, rather than buffering the whole (potentially slow, per-store live-fetch)
@@ -61,7 +66,7 @@ internal abstract class GetPricesByLocationEndpoint
         response.ContentType = "application/x-ndjson";
         await foreach (PriceStreamEvent evt in PriceLookup.StreamPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct))
         {
-            await JsonSerializer.SerializeAsync(response.Body, evt, cancellationToken: ct);
+            await JsonSerializer.SerializeAsync(response.Body, evt, StreamJsonOptions, ct);
             await response.Body.WriteAsync("\n"u8.ToArray(), ct);
             await response.Body.FlushAsync(ct);
         }
