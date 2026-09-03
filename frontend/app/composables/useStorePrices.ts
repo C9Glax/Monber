@@ -162,8 +162,9 @@ export function useStorePrices() {
       pois.value = poiResult
       storeStatus.value = new Map(poiResult.map((store) => [store.id, 'pending' as const]))
     }
-    catch {
+    catch (err) {
       if (controller.signal.aborted) return
+      console.error('POI fetch failed:', err)
       error.value = 'Could not reach the POI service.'
       loading.value = false
       return
@@ -178,8 +179,9 @@ export function useStorePrices() {
         storeStatus.value = new Map(storeStatus.value).set(event.storeId, event.hasPrices ? 'priced' : 'empty')
       }, controller.signal)
     }
-    catch {
+    catch (err) {
       if (controller.signal.aborted) return
+      console.error('Prices stream failed:', err)
       error.value = 'Could not reach the Prices service.'
     }
     finally {
