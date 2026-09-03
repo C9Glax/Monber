@@ -13,13 +13,17 @@ const locating = ref(false)
 const geocoding = ref(false)
 const geocodeError = ref<string | null>(null)
 
-const { loading, error, merged, mergedFuture, refresh, inRange, inRangeFuture, unpricedInRange } = useStorePrices()
+const {
+  loading, pricesLoading, error, merged, mergedFuture,
+  refresh, inRange, inRangeFuture, pendingInRange, emptyInRange,
+} = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
 
 const rangeStores = computed(() => inRange(radiusKm.value))
 const futureRangeStores = computed(() => inRangeFuture(radiusKm.value))
-const unpricedStores = computed(() => unpricedInRange(radiusKm.value))
+const pendingStores = computed(() => pendingInRange(radiusKm.value))
+const emptyStores = computed(() => emptyInRange(radiusKm.value))
 
 const best = computed(() => rangeStores.value[0] ?? null)
 const futureBest = computed(() => futureRangeStores.value[0] ?? null)
@@ -114,7 +118,8 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
       :lon="lon"
       :radius-km="radiusKm"
       :stores="rangeStores"
-      :unpriced-stores="unpricedStores"
+      :pending-stores="pendingStores"
+      :empty-stores="emptyStores"
       @location-click="onMapLocationClick"
       @store-select="onStoreMarkerSelect"
     />
@@ -138,10 +143,10 @@ watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
         <div v-if="error" class="error-card">{{ error }}</div>
         <div v-else-if="loading" class="loading-card">Loading nearby stores…</div>
         <template v-else>
-          <CheapestCard :best="best" :area-avg="areaAvg" @show="showBestOnMap" />
+          <CheapestCard :best="best" :area-avg="areaAvg" :prices-loading="pricesLoading" @show="showBestOnMap" />
           <FutureLowestCard :best="futureBest" @show="showFutureBestOnMap" />
           <SelectedStoreCard :current="selectedCurrent" :future="selectedFuture" @show="showSelectedOnMap" />
-          <StoreList :rows="rangeStores" :area-avg="areaAvg" @select="selectStore" />
+          <StoreList :rows="rangeStores" :area-avg="areaAvg" :prices-loading="pricesLoading" @select="selectStore" />
         </template>
 
         <ApiDebugLine :poi-url="poiUrl" :prices-url="pricesApiUrl" />

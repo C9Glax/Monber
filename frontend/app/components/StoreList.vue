@@ -6,6 +6,7 @@ const props = defineProps<{
   rows: RangedStore[]
   areaAvg: number | null
   dealThreshold?: number
+  pricesLoading?: boolean
 }>()
 
 const emit = defineEmits<{ select: [store: RangedStore] }>()
@@ -20,7 +21,7 @@ function isDeal(store: RangedStore): boolean {
   <div class="card">
     <div class="header">
       <span class="heading">Stores in range · {{ rows.length }}</span>
-      <span class="sub">lowest first</span>
+      <span class="sub">lowest first<template v-if="pricesLoading"> · fetching prices…</template></span>
     </div>
     <div class="mb-scroll list">
       <div

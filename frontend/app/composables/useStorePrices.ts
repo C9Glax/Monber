@@ -1,5 +1,5 @@
 import type { PoiStore, PriceObservation } from './useMonberApi'
-import { fetchPoiStores, fetchPrices } from './useMonberApi'
+import { fetchPoiStores, streamPrices } from './useMonberApi'
 
 /** A tracked pack size. Stores price every flavor of a given pack identically, so flavor isn't tracked -
  * only pack size, since that's what actually moves the per-can price (bulk packs are cheaper per can). */
@@ -33,6 +33,8 @@ export interface MergedStore {
   effectiveFrom: string | null
   /** The page `perCanPrice` was fetched from, if known. */
   sourceUrl: string | null
+  /** Whether this store's prices have been checked yet - 'pending' until the price stream reports on it. */
+  priceStatus: 'pending' | 'priced' | 'empty'
 }
 
 export interface RangedStore extends MergedStore {
@@ -71,7 +73,8 @@ export function ago(iso: string | null): string {
  * PriceObservation.effectiveFrom and KauflandPriceFetcher on the backend.
  */
 function mergeStores(
-  pois: PoiStore[], observations: PriceObservation[], userLat: number, userLon: number, wantFuture = false,
+  pois: PoiStore[], observations: PriceObservation[], storeStatus: Map<number, 'pending' | 'priced' | 'empty'>,
+  userLat: number, userLon: number, wantFuture = false,
 ): MergedStore[] {
   const relevant = observations.filter((o) => (o.effectiveFrom != null) === wantFuture)
 
@@ -123,6 +126,7 @@ function mergeStores(
       latestFetchedAt,
       effectiveFrom,
       sourceUrl,
+      priceStatus: storeStatus.get(store.id) ?? 'pending',
     })
   }
 
@@ -132,7 +136,10 @@ function mergeStores(
 export function useStorePrices() {
   const pois = ref<PoiStore[]>([])
   const observations = ref<PriceObservation[]>([])
+  const storeStatus = ref<Map<number, 'pending' | 'priced' | 'empty'>>(new Map())
   const loading = ref(false)
+  /** True while the price stream for the current query is still delivering stores. */
+  const pricesLoading = ref(false)
   const error = ref<string | null>(null)
   const lastQuery = ref<{ lat: number, lon: number } | null>(null)
 
@@ -147,34 +154,48 @@ export function useStorePrices() {
 
     loading.value = true
     error.value = null
+    observations.value = []
     lastQuery.value = { lat, lon }
     try {
-      const [poiResult, priceResult] = await Promise.all([
-        fetchPoiStores(lat, lon, controller.signal),
-        fetchPrices(lat, lon, controller.signal),
-      ])
+      const poiResult = await fetchPoiStores(lat, lon, controller.signal)
       if (controller.signal.aborted) return
       pois.value = poiResult
-      observations.value = priceResult
+      storeStatus.value = new Map(poiResult.map((store) => [store.id, 'pending' as const]))
     }
     catch {
       if (controller.signal.aborted) return
-      error.value = 'Could not reach the POI/Prices services.'
+      error.value = 'Could not reach the POI service.'
+      loading.value = false
+      return
+    }
+    loading.value = false
+
+    pricesLoading.value = true
+    try {
+      await streamPrices(lat, lon, (event) => {
+        if (controller.signal.aborted) return
+        if (event.observations.length > 0) observations.value = [...observations.value, ...event.observations]
+        storeStatus.value = new Map(storeStatus.value).set(event.storeId, event.hasPrices ? 'priced' : 'empty')
+      }, controller.signal)
+    }
+    catch {
+      if (controller.signal.aborted) return
+      error.value = 'Could not reach the Prices service.'
     }
     finally {
-      if (activeController === controller) loading.value = false
+      if (activeController === controller) pricesLoading.value = false
     }
   }
 
   const merged = computed(() => {
     if (!lastQuery.value) return []
-    return mergeStores(pois.value, observations.value, lastQuery.value.lat, lastQuery.value.lon)
+    return mergeStores(pois.value, observations.value, storeStatus.value, lastQuery.value.lat, lastQuery.value.lon)
   })
 
   /** Same as `merged`, but built only from upcoming/future prices (see PriceObservation.effectiveFrom). */
   const mergedFuture = computed(() => {
     if (!lastQuery.value) return []
-    return mergeStores(pois.value, observations.value, lastQuery.value.lat, lastQuery.value.lon, true)
+    return mergeStores(pois.value, observations.value, storeStatus.value, lastQuery.value.lat, lastQuery.value.lon, true)
   })
 
   function rangeFrom(source: MergedStore[], radiusKm: number): RangedStore[] {
@@ -196,10 +217,18 @@ export function useStorePrices() {
     return rangeFrom(mergedFuture.value, radiusKm)
   }
 
-  /** Stores within `radiusKm` that have no price data for any pack size. */
-  function unpricedInRange(radiusKm: number): MergedStore[] {
-    return merged.value.filter((store) => store.dist <= radiusKm && store.perCanPrice == null)
+  /** Stores within `radiusKm` not yet checked by the price stream. */
+  function pendingInRange(radiusKm: number): MergedStore[] {
+    return merged.value.filter((store) => store.dist <= radiusKm && store.priceStatus === 'pending')
   }
 
-  return { pois, observations, loading, error, merged, mergedFuture, refresh, inRange, inRangeFuture, unpricedInRange }
+  /** Stores within `radiusKm` that were checked and confirmed to have no price data. */
+  function emptyInRange(radiusKm: number): MergedStore[] {
+    return merged.value.filter((store) => store.dist <= radiusKm && store.priceStatus === 'empty')
+  }
+
+  return {
+    pois, observations, loading, pricesLoading, error, merged, mergedFuture,
+    refresh, inRange, inRangeFuture, pendingInRange, emptyInRange,
+  }
 }

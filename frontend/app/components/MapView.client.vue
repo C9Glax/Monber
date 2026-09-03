@@ -8,7 +8,10 @@ const props = defineProps<{
   lon: number
   radiusKm: number
   stores: RangedStore[]
-  unpricedStores: MergedStore[]
+  /** Stores not yet checked by the price stream - shown with a loading marker. */
+  pendingStores: MergedStore[]
+  /** Stores confirmed to have no price data. */
+  emptyStores: MergedStore[]
 }>()
 
 const emit = defineEmits<{ locationClick: [lat: number, lon: number], storeSelect: [id: number] }>()
@@ -57,12 +60,26 @@ async function paintMarkers(refit: boolean) {
     marker.addTo(markerLayer)
   }
 
-  for (const store of props.unpricedStores) {
+  for (const store of props.pendingStores) {
+    const marker = L.marker([store.lat, store.lon], {
+      zIndexOffset: -1000,
+      icon: L.divIcon({ className: '', iconSize: [12, 12], iconAnchor: [6, 6], html: '<div class="mb-pending"></div>' }),
+    })
+    marker.bindPopup(`<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>Checking price…`)
+    marker.on('click', () => {
+      selectedId = store.id
+      emit('storeSelect', store.id)
+      paintMarkers(false)
+    })
+    marker.addTo(markerLayer)
+  }
+
+  for (const store of props.emptyStores) {
     const marker = L.marker([store.lat, store.lon], {
       zIndexOffset: -1000,
       icon: L.divIcon({ className: '', iconSize: [9, 9], iconAnchor: [4, 4], html: '<div class="mb-empty"></div>' }),
     })
-    marker.bindPopup(`<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>No price data yet`)
+    marker.bindPopup(`<b>${store.brand}</b>${store.name ? `<br>${store.name}` : ''}<br>No price data`)
     marker.on('click', () => {
       selectedId = store.id
       emit('storeSelect', store.id)
@@ -221,7 +238,8 @@ watch(
     props.lon,
     props.radiusKm,
     props.stores.map((s) => s.id).join(','),
-    props.unpricedStores.map((s) => s.id).join(','),
+    props.pendingStores.map((s) => s.id).join(','),
+    props.emptyStores.map((s) => s.id).join(','),
   ],
   () => {
     // Debounced: the radius slider/number input fires on every tick while dragging, and each
