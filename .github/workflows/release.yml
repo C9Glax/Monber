@@ -1,0 +1,128 @@
+name: Release images and compose
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  REPOSITORY: c9glax
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The three .NET services are containerized via the .NET SDK's built-in container support
+      # (dotnet publish /t:PublishContainer) - no Dockerfile needed for these.
+      - name: Build and push Services.POI image
+        run: >
+          dotnet publish Services.POI/Services.POI.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-poi
+          -p:ContainerImageTag=${{ github.ref_name }}
+
+      - name: Build and push Services.Prices image
+        run: >
+          dotnet publish Services.Prices/Services.Prices.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-services-prices
+          -p:ContainerImageTag=${{ github.ref_name }}
+
+      - name: Build and push Gateway image
+        run: >
+          dotnet publish MonberAPI.Gateway/MonberAPI.Gateway.csproj -c Release
+          -p:PublishProfile=DefaultContainer
+          -p:ContainerRegistry=${{ env.REGISTRY }}
+          -p:ContainerRepository=${{ env.REPOSITORY }}/monber-gateway
+          -p:ContainerImageTag=${{ github.ref_name }}
+
+      # SDK container support's ContainerImageTags MSBuild property doesn't take a semicolon-
+      # delimited list cleanly from the command line (its validation rejects the raw ;-joined
+      # string before splitting it), so each service above is only pushed under its version tag.
+      # Alias "latest" to it with a registry-side manifest copy instead of a second build.
+      - name: Tag .NET service images as latest
+        run: |
+          for image in monber-services-poi monber-services-prices monber-gateway; do
+            docker buildx imagetools create \
+              -t ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:latest \
+              ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:${{ github.ref_name }}
+          done
+
+      # The Nuxt frontend has its own Dockerfile (frontend/Dockerfile) since it isn't a .NET
+      # project and can't use SDK container support.
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:latest
+
+      - name: Install Aspire CLI
+        run: curl -sSL https://aspire.dev/install.sh | bash -s -- --version 13.4.6
+
+      # `aspire publish` lays out release/docker-compose.yaml with ${..._IMAGE}/${..._PORT}
+      # placeholders for every "requires image build" resource - it doesn't build or push anything
+      # itself. Output goes to release/ rather than deploy/ so this tag-triggered workflow never
+      # collides with the deploy/ file publish.yml commits back to main on every push.
+      - name: Generate docker-compose.yaml
+        run: aspire publish --project MonberAPI.AppHost -o release --non-interactive
+
+      # This release ships the "latest" images (not the version-pinned ones) so that pulling the
+      # attached compose file always tracks the most recently released version.
+      - name: Bake image tags and internal ports into docker-compose.yaml
+        run: |
+          sed -i \
+            -e "s|\${SERVICES_POI_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-poi:latest|g" \
+            -e "s|\${SERVICES_POI_PORT}|8080|g" \
+            -e "s|\${SERVICES_PRICES_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-services-prices:latest|g" \
+            -e "s|\${SERVICES_PRICES_PORT}|8080|g" \
+            -e "s|\${GATEWAY_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-gateway:latest|g" \
+            -e "s|\${FRONTEND_IMAGE}|${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:latest|g" \
+            -e 's|NUXT_PUBLIC_MAP_TILER_KEY: ""|NUXT_PUBLIC_MAP_TILER_KEY: "${MAPTILER_API_KEY}"|' \
+            -e 's|- "\${GATEWAY_PORT}"|- "${GATEWAY_PORT}:${GATEWAY_PORT}"|' \
+            release/docker-compose.yaml
+
+          cat > release/.env <<EOF
+          GATEWAY_PORT=8080
+          MAPTILER_API_KEY=${{ vars.MAPTILER_API_KEY }}
+          EOF
+
+      # Stable release named after the pushed vX.Y.Z tag, marked as the repo's "latest" release
+      # (unlike publish.yml's prerelease builds off main), with the latest-image compose bundle
+      # attached so it's downloadable without cloning the repo.
+      - name: Publish release with deploy assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          make_latest: "true"
+          files: |
+            release/docker-compose.yaml
+            release/.env

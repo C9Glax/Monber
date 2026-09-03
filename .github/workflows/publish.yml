@@ -62,18 +62,6 @@ jobs:
           -p:ContainerRepository=${{ env.REPOSITORY }}/monber-gateway
           -p:ContainerImageTag=${{ github.sha }}
 
-      # SDK container support's ContainerImageTags MSBuild property doesn't take a semicolon-
-      # delimited list cleanly from the command line (its validation rejects the raw ;-joined
-      # string before splitting it), so each service above is only pushed under its sha tag. Alias
-      # "latest" to it with a registry-side manifest copy instead of a second build.
-      - name: Tag .NET service images as latest
-        run: |
-          for image in monber-services-poi monber-services-prices monber-gateway; do
-            docker buildx imagetools create \
-              -t ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:latest \
-              ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/$image:${{ github.sha }}
-          done
-
       # The Nuxt frontend has its own Dockerfile (frontend/Dockerfile) since it isn't a .NET
       # project and can't use SDK container support.
       - name: Build and push frontend image
@@ -83,7 +71,6 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/monber-frontend:latest
 
       - name: Install Aspire CLI
         run: curl -sSL https://aspire.dev/install.sh | bash -s -- --version 13.4.6
@@ -135,16 +122,17 @@ jobs:
       - name: Set release tag
         run: echo "RELEASE_TAG=deploy-$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_ENV"
 
-      # Draft release so deploy/docker-compose.yaml + deploy/.env are downloadable without cloning
+      # Pre-release so deploy/docker-compose.yaml + deploy/.env are downloadable without cloning
       # the repo. Tagged with a build timestamp (rather than a rolling "latest") so each run
-      # produces its own release instead of overwriting a shared tag. Kept as a draft deliberately
-      # - it only becomes visible/public once someone publishes it manually from the Releases tab.
-      - name: Draft release with deploy assets
+      # produces its own release instead of overwriting a shared tag. Marked prerelease since
+      # these are untagged main-branch builds; a stable "latest" release is cut separately by
+      # release.yml when a vX.Y.Z tag is pushed.
+      - name: Publish pre-release with deploy assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TAG }}
-          draft: true
+          prerelease: true
           files: |
             deploy/docker-compose.yaml
             deploy/.env
