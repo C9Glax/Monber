@@ -64,11 +64,22 @@ internal abstract class GetPricesByLocationEndpoint
             httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
 
         response.ContentType = "application/x-ndjson";
-        await foreach (PriceStreamEvent evt in PriceLookup.StreamPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct))
+
+        async Task WriteEventAsync(PriceStreamEvent evt)
         {
             await JsonSerializer.SerializeAsync(response.Body, evt, StreamJsonOptions, ct);
             await response.Body.WriteAsync("\n"u8.ToArray(), ct);
             await response.Body.FlushAsync(ct);
         }
+
+        // Stores without a chain mapping yet (StoreSync hasn't matched them to this brand's own
+        // store list, which happens on its own ~15min background cycle) can't be live-fetched at
+        // all - report them as checked/no-price immediately instead of omitting them from the
+        // stream, so the client doesn't spin on them forever waiting for an event that never comes.
+        foreach (DbStore store in nearby.Where(s => !externalIdsByStoreId.ContainsKey(s.Id)))
+            await WriteEventAsync(new PriceStreamEvent(store.Id, false, []));
+
+        await foreach (PriceStreamEvent evt in PriceLookup.StreamPricesAsync(ctx, fetchersByBrand, priced, TrackedProducts.All, logger, ct))
+            await WriteEventAsync(evt);
     }
 }
