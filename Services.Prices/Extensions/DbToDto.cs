@@ -15,7 +15,12 @@ internal static class DbToDto
         store.Longitude
     );
 
-    public static PriceObservation ToDto(this DbPriceObservation observation, PricedStore store) => new(
+    /// <param name="withValidity">
+    /// Set for a price being served as current (see PriceLookup), so the client is told when it
+    /// expires. Left off for raw history rows (GetPriceHistoryEndpoint), which are past observations
+    /// rather than claims about what a price still is.
+    /// </param>
+    public static PriceObservation ToDto(this DbPriceObservation observation, PricedStore store, bool withValidity = false) => new(
         store.StoreId,
         store.Brand,
         store.Name,
@@ -24,6 +29,7 @@ internal static class DbToDto
         observation.Currency,
         observation.FetchedAt,
         observation.EffectiveFrom,
-        observation.SourceUrl
+        observation.SourceUrl,
+        withValidity ? StoreClock.ValidUntil(store, observation.FetchedAt) : null
     );
 }
