@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Services.Prices.Entities;
 
 [method: JsonConstructor]
-public record PriceObservation(long StoreId, string Brand, string? StoreName, string Product, decimal Price, string Currency, DateTimeOffset FetchedAt, DateOnly? EffectiveFrom = null, string? SourceUrl = null)
+public record PriceObservation(long StoreId, string Brand, string? StoreName, string Product, decimal Price, string Currency, DateTimeOffset FetchedAt, DateOnly? EffectiveFrom = null, string? SourceUrl = null, DateTimeOffset? ValidUntil = null)
 {
     [Description("The id of the store this price was observed at")]
     public long StoreId { get; init; } = StoreId;
@@ -32,4 +32,7 @@ public record PriceObservation(long StoreId, string Brand, string? StoreName, st
 
     [Description("The page the price was fetched from, if known")]
     public string? SourceUrl { get; init; } = SourceUrl;
+
+    [Description("When this price expires: the start of the day after it was fetched, in the store's local timezone. Prices are only valid on the day they were fetched. Null on raw history rows, where expiry carries no meaning.")]
+    public DateTimeOffset? ValidUntil { get; init; } = ValidUntil;
 }
