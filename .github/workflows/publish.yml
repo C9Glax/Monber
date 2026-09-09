@@ -3,8 +3,6 @@ name: Publish images and compose
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'deploy/**'
 
 permissions:
   contents: write
@@ -112,12 +110,6 @@ jobs:
           GATEWAY_PORT=8080
           MAPTILER_API_KEY=${{ vars.MAPTILER_API_KEY }}
           EOF
-
-      - name: Commit deploy/ back to main
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: regenerate docker-compose.yaml [skip ci]"
-          file_pattern: deploy/*
 
       - name: Set release tag
         run: echo "RELEASE_TAG=deploy-$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_ENV"
