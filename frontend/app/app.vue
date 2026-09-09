@@ -2,13 +2,17 @@
 import { MAX_RADIUS_KM } from './composables/useStorePrices'
 import { poiStoresUrl, pricesUrl } from './composables/useMonberApi'
 import { geocodeAddress } from './composables/useGeocoding'
+import { useLastLocation } from './composables/useLastLocation'
 
 const RADIUS_PRESETS = [1, 2, 5]
 
-const lat = ref(52.5200)
-const lon = ref(13.4050)
-const placeLabel = ref('Berlin Mitte, DE')
-const radiusKm = ref(5)
+const { loadLastLocation, saveLastLocation } = useLastLocation()
+const lastLocation = loadLastLocation()
+
+const lat = ref(lastLocation?.lat ?? 52.5200)
+const lon = ref(lastLocation?.lon ?? 13.4050)
+const placeLabel = ref(lastLocation?.placeLabel ?? 'Berlin Mitte, DE')
+const radiusKm = ref(lastLocation?.radiusKm ?? 5)
 const locating = ref(false)
 const geocoding = ref(false)
 const geocodeError = ref<string | null>(null)
@@ -108,6 +112,12 @@ function locate() {
 }
 
 watch([lat, lon], () => refresh(lat.value, lon.value), { immediate: true })
+
+watch([lat, lon, placeLabel, radiusKm], () => {
+  saveLastLocation({ lat: lat.value, lon: lon.value, placeLabel: placeLabel.value, radiusKm: radiusKm.value })
+}, { immediate: true })
+
+onMounted(() => locate())
 </script>
 
 <template>
