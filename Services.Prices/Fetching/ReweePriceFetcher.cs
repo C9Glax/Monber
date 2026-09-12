@@ -33,7 +33,9 @@ namespace Services.Prices.Fetching;
 /// regardless of which flavor that tile is; a tile is in stock when its `sps-product-stock` element's
 /// `data-available` attribute is `"true"` rather than `"false"` ("Nicht vorrätig") - confirmed live that an
 /// out-of-stock tile still renders a (stale) price in its `aria-label`, so that flag must be checked
-/// explicitly rather than trusting any tile with a parseable price.
+/// explicitly rather than trusting any tile with a parseable price. An out-of-stock pack size is also
+/// excluded from the flyer fallback below (not just from the search result itself) - otherwise a generic
+/// flyer price for that pack size gets reported in place of the store's own "unavailable" signal.
 ///
 /// The search page above only ever reflects whichever price is active *today* - a deal that starts next
 /// week never shows there (its price tag renders empty until the deal actually starts, confirmed live).
@@ -110,11 +112,19 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         // (rather than matching the aria-label across the whole page) is what lets ParseTile see that
         // specific tile's own `data-available` flag instead of a neighboring tile's.
         int[] tileStarts = [.. ProductTileStartRegex().Matches(html).Select(m => m.Index), html.Length];
-        (string PackSize, decimal Price)[] tiles = [.. Enumerable.Range(0, tileStarts.Length - 1)
+        (string PackSize, decimal Price, bool Available)[] parsedTiles = [.. Enumerable.Range(0, tileStarts.Length - 1)
             .Select(i => html[tileStarts[i]..tileStarts[i + 1]])
             .Select(ParseTile)
             .Where(t => t is not null)
             .Select(t => t!.Value)];
+
+        (string PackSize, decimal Price)[] tiles = [.. parsedTiles.Where(t => t.Available).Select(t => (t.PackSize, t.Price))];
+
+        // Pack sizes the site explicitly listed as "Nicht vorrätig" - distinct from a pack size that just
+        // isn't in the search results at all. Passed to AddFlyerDealsAsync so a store-level out-of-stock
+        // signal from the live site isn't papered over by a generic flyer price for the same product.
+        HashSet<string> outOfStockPackSizes = new(
+            parsedTiles.Where(t => !t.Available).Select(t => t.PackSize), StringComparer.OrdinalIgnoreCase);
 
         List<ChainPrice> results = [];
         foreach (string product in products)
@@ -131,7 +141,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
             }
         }
 
-        await AddFlyerDealsAsync(wwIdent, products, results, ct);
+        await AddFlyerDealsAsync(wwIdent, products, results, outOfStockPackSizes, ct);
 
         return [.. results];
     }
@@ -139,10 +149,14 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
     /// <summary>
     /// Adds current- and next-week flyer deals for tracked products, skipping a current-week one if the
     /// search lookup above already found a price for that product today (the search result is preferred
-    /// there - it reflects the live site rather than a possibly-not-yet-updated flyer scrape). A
-    /// next-week deal is always added when found, since <see cref="SearchUrl"/> can never report it.
+    /// there - it reflects the live site rather than a possibly-not-yet-updated flyer scrape) or if the
+    /// search explicitly reported that pack size as out of stock at this store (<paramref
+    /// name="outOfStockPackSizes"/>) - a generic flyer price must not override a store-level "not
+    /// available right now" signal. A next-week deal is always added when found, since <see
+    /// cref="SearchUrl"/> can never report it and out-of-stock is only known to be true as of today.
     /// </summary>
-    private async Task AddFlyerDealsAsync(string wwIdent, string[] products, List<ChainPrice> results, CancellationToken ct)
+    private async Task AddFlyerDealsAsync(
+        string wwIdent, string[] products, List<ChainPrice> results, HashSet<string> outOfStockPackSizes, CancellationToken ct)
     {
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
         int currentWeek = ISOWeek.GetWeekOfYear(today.ToDateTime(TimeOnly.MinValue));
@@ -163,7 +177,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         {
             string packSize = product.Replace("Monster Energy", "", StringComparison.OrdinalIgnoreCase).Trim();
 
-            if (!results.Any(r => r.Product == product && r.EffectiveFrom is null))
+            if (!results.Any(r => r.Product == product && r.EffectiveFrom is null) && !outOfStockPackSizes.Contains(packSize))
             {
                 foreach ((string offerPackSize, decimal price) in currentOffers)
                 {
@@ -292,17 +306,10 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         return true;
     }
 
-    private static (string PackSize, decimal Price)? ParseTile(string tileHtml)
+    private static (string PackSize, decimal Price, bool Available)? ParseTile(string tileHtml)
     {
         Match match = ProductTileRegex().Match(tileHtml);
         if (!match.Success)
-            return null;
-
-        // A tile whose stock badge reads "Nicht vorrätig" still renders a price (last-known, not current),
-        // so it must be excluded here rather than trusted - confirmed live via
-        // `data-available="false"` on the tile's `sps-product-stock` element.
-        Match availabilityMatch = AvailabilityRegex().Match(tileHtml);
-        if (availabilityMatch.Success && availabilityMatch.Groups["available"].Value == "false")
             return null;
 
         if (!decimal.TryParse(
@@ -316,7 +323,16 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         if (!sizeMatch.Success)
             return null;
 
-        return (sizeMatch.Value, price);
+        // A tile whose stock badge reads "Nicht vorrätig" still renders a price (last-known, not current)
+        // in its aria-label - confirmed live via `data-available="false"` on the tile's
+        // `sps-product-stock` element. The tile is still reported (as unavailable) rather than dropped
+        // here, so the caller can tell "not carried by this store" apart from "carried but out of stock
+        // right now" - the latter must also suppress the flyer fallback below, or a generic flyer price
+        // ends up reported for a product the store's own site says isn't currently available.
+        Match availabilityMatch = AvailabilityRegex().Match(tileHtml);
+        bool available = !(availabilityMatch.Success && availabilityMatch.Groups["available"].Value == "false");
+
+        return (sizeMatch.Value, price, available);
     }
 
     [GeneratedRegex(@"<article[^>]*\bdata-product-tile\b")]
