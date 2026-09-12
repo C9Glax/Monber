@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MonberAPI is a .NET 10 / ASP.NET Core Aspire solution made up of two independent minimal-API microservices orchestrated by an Aspire AppHost:
 
 - `Services.POI` — points-of-interest service. Stores German grocery store locations (Kaufland, Rewe, Netto, HIT, EDEKA, Lidl, Aldi Nord, Aldi Süd, Penny) fetched from the Overpass API (OpenStreetMap) and persisted in a local SQLite database (`stores.db`), queried by geographic radius.
-- `Services.Prices` — a stub service with the endpoint-mapping scaffolding in place but no endpoints implemented yet.
+- `Services.Prices` — tracks live and upcoming prices for a small set of tracked products (currently just Monster Energy pack sizes) across the same grocery chains, fetched on demand per store from each chain's own site/webshop and cached in a local SQLite database.
 
 Shared cross-cutting concerns (OpenTelemetry, health checks, service discovery, HTTP resilience) live in `MonberAPI.ServiceDefaults` and are wired into every service via `builder.AddServiceDefaults()`.
 
@@ -60,3 +60,13 @@ Each service maps its routes through a `Features/Endpoints.cs` with a `MapEndpoi
 - `GetStoresEndpoint` (`GET /stores?lat=&lon=`) runs a raw-SQL haversine-distance query (`FromSql`) against `stores`, hardcoded to a 30 km radius, ordered by distance.
 
 When modifying the Overpass query or store brand list, note the query is built via naive `string.Format` into a single POST body — there's no query builder abstraction.
+
+### Services.Prices data flow
+
+- `TrackedProducts.cs` — the fixed list of product names (currently only Monster Energy pack sizes, e.g. `"Monster Energy 0,5l"`) every chain adapter is asked to price.
+- `Fetching/IChainPriceFetcher.cs` — the per-chain adapter contract: `DiscoverStoresAsync` (bulk, cheap, safe to run on a schedule) and `FetchPricesAsync` (per-store, expensive, only called on demand). `ChainPrice.EffectiveFrom` is null for a price in effect now, or a future date for a price that only becomes effective then (e.g. an upcoming flyer/sale that hasn't started yet).
+- `Fetching/PriceFetchers.cs` — wires up one adapter per chain (Kaufland, Netto, HIT, Edeka, Lidl, Aldi Nord, Aldi Süd, Penny, Rewe). Most chains only have a current flyer (no full everyday catalog), so their adapters scrape that week's promotional-offer data; Rewe has both an everyday catalog (`ReweePriceFetcher`'s `/suche/uebersicht` search) and weekly flyer deals (`ReweeFlyerParser`, parsing the "Prospekt" PDF REWE embeds via publitas.com for this week's *and* next week's deals — the search page only ever reflects today's active price).
+- `ReweePriceFetcher` is the only adapter that depends on FlareSolverr (REWE's `www.rewe.de` sits behind Cloudflare) and is only included in `PriceFetchers.All` when `FlareSolverr:Url` is configured; the flyer/publitas lookup it also does needs no FlareSolverr since publitas.com isn't Cloudflare-protected.
+- `StoreSync.cs` / `PoiStoreMatching.cs` — syncs each chain's discovered stores against `Services.POI`'s own store list so a price lookup can be keyed by POI store id.
+- `PriceLookup.cs` — the on-demand orchestrator: for a given set of stores/products, serves cached prices fetched earlier today (per store-local calendar day, see `StoreClock.cs`) and only calls out to a chain's `FetchPricesAsync` for whatever's stale, persisting new observations to `DbPriceObservation`.
+- `Features/Endpoints.cs` maps `GET /stores`, `POST /stores/update`, `GET /prices` (by location, streaming), `GET /prices/store`, and `GET /prices/history`.
