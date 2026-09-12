@@ -1,4 +1,5 @@
 using MonberAPI.PoiData.Database;
+using Services.Prices.Fetching;
 
 namespace Services.Prices;
 
@@ -26,6 +27,34 @@ internal static class PoiStoreMatching
         }
 
         return bestId;
+    }
+
+    /// <summary>
+    /// The reverse of <see cref="FindNearest"/>: given a POI store's own location, finds the nearest
+    /// same-brand chain store from a live <see cref="IChainPriceFetcher.DiscoverStoresAsync"/> result.
+    /// Used to resolve a chain's external store id on demand for a single store that the scheduled
+    /// <see cref="StoreSync"/> pass hasn't matched yet (e.g. just discovered, or its last sync predates
+    /// this store), rather than making a force-refresh wait on the next scheduled sync.
+    /// </summary>
+    internal static ChainStore? FindNearestChainStore(ChainStore[] chainStores, double lat, double lon)
+    {
+        ChainStore? best = null;
+        double bestDistanceKm = double.MaxValue;
+
+        foreach (ChainStore candidate in chainStores)
+        {
+            if (candidate.Latitude is not { } candidateLat || candidate.Longitude is not { } candidateLon)
+                continue;
+
+            double distanceKm = HaversineKm(lat, lon, candidateLat, candidateLon);
+            if (distanceKm <= MatchThresholdKm && distanceKm < bestDistanceKm)
+            {
+                bestDistanceKm = distanceKm;
+                best = candidate;
+            }
+        }
+
+        return best;
     }
 
     private static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
