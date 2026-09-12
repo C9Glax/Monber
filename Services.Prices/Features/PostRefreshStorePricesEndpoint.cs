@@ -12,7 +12,7 @@ namespace Services.Prices.Features;
 internal abstract class PostRefreshStorePricesEndpoint
 {
     public static async Task<Results<Ok<PriceObservation[]>, NotFound>> Handle(
-        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
+        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILoggerFactory loggerFactory,
         ILogger<PostRefreshStorePricesEndpoint> logger,
         [FromQuery(Name = "storeId")] long storeId, CancellationToken ct)
     {
@@ -21,7 +21,7 @@ internal abstract class PostRefreshStorePricesEndpoint
             return TypedResults.NotFound();
 
         Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
-            httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
+            httpClientFactory, loggerFactory, FlareSolverrOptions.IsConfigured(configuration));
         PriceObservation[] result = await PriceLookup.GetPricesAsync(
             ctx, fetchersByBrand, [store], TrackedProducts.All, logger, ct, forceRefresh: true);
 

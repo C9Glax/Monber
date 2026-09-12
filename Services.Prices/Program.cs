@@ -169,10 +169,11 @@ _ = Task.Run(async () =>
             await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
             Context ctx = scope.ServiceProvider.GetRequiredService<Context>();
             IHttpClientFactory httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+            ILoggerFactory loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
             ILogger<Program> storeSyncLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
             await StoreSync.RunAsync(
-                ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
+                ctx, PriceFetchers.All(httpClientFactory, loggerFactory, FlareSolverrOptions.IsConfigured(app.Configuration)),
                 storeSyncLogger, app.Lifetime.ApplicationStopping);
 
             if (!startupSyncDone)
