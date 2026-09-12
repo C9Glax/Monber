@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace Services.Prices.Fetching;
 
@@ -45,7 +46,8 @@ namespace Services.Prices.Fetching;
 /// Cloudflare entirely - confirmed live: plain unauthenticated GETs against services.publitas.com and
 /// view.publitas.com both succeed with this same plain HttpClient, no FlareSolverr involved.
 /// </summary>
-internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrClient flareSolverr) : IChainPriceFetcher
+internal sealed partial class ReweePriceFetcher(
+    HttpClient client, FlareSolverrClient flareSolverr, ILogger<ReweePriceFetcher> logger) : IChainPriceFetcher
 {
     public string Brand => "Rewe";
 
@@ -98,6 +100,10 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         if (wwIdent is null)
             return [];
 
+        logger.LogInformation(
+            "Resolved Rewe market {WwIdent} for external store {ExternalStoreId} ({Name}) at {Lat},{Lon}",
+            wwIdent, store.ExternalStoreId, store.Name, lat, lon);
+
         // The cookie value must be URL-encoded, same as the real site sets it - a raw JSON value contains
         // characters (", {, :) that aren't valid in a bare cookie value and get silently dropped.
         string marketCookieValue = Uri.EscapeDataString(
@@ -125,6 +131,12 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         // signal from the live site isn't papered over by a generic flyer price for the same product.
         HashSet<string> outOfStockPackSizes = new(
             parsedTiles.Where(t => !t.Available).Select(t => t.PackSize), StringComparer.OrdinalIgnoreCase);
+
+        logger.LogInformation(
+            "Rewe market {WwIdent} search tiles: in stock [{InStock}], out of stock [{OutOfStock}]",
+            wwIdent,
+            string.Join(", ", tiles.Select(t => $"{t.PackSize}={t.Price}")),
+            string.Join(", ", outOfStockPackSizes));
 
         List<ChainPrice> results = [];
         foreach (string product in products)
@@ -306,7 +318,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         return true;
     }
 
-    private static (string PackSize, decimal Price, bool Available)? ParseTile(string tileHtml)
+    private (string PackSize, decimal Price, bool Available)? ParseTile(string tileHtml)
     {
         Match match = ProductTileRegex().Match(tileHtml);
         if (!match.Success)
@@ -329,8 +341,15 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         // here, so the caller can tell "not carried by this store" apart from "carried but out of stock
         // right now" - the latter must also suppress the flyer fallback below, or a generic flyer price
         // ends up reported for a product the store's own site says isn't currently available.
+        //
+        // A tile missing the stock badge entirely is treated as unavailable rather than available - the
+        // badge is always present in the server-rendered search HTML (confirmed live), so a genuinely
+        // missing match more likely means the markup changed than that this tile has no stock concept,
+        // and reporting nothing beats reporting a price REWE's own site can't currently back up.
         Match availabilityMatch = AvailabilityRegex().Match(tileHtml);
-        bool available = !(availabilityMatch.Success && availabilityMatch.Groups["available"].Value == "false");
+        if (!availabilityMatch.Success)
+            logger.LogWarning("Rewe search tile had no data-available marker - treating as out of stock: {Tile}", tileHtml);
+        bool available = availabilityMatch.Success && availabilityMatch.Groups["available"].Value == "true";
 
         return (sizeMatch.Value, price, available);
     }

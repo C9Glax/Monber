@@ -28,7 +28,7 @@ internal abstract class GetPricesByLocationEndpoint
     /// </summary>
     public static async Task Handle(
         HttpResponse response, Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
-        ILogger<GetPricesByLocationEndpoint> logger,
+        ILoggerFactory loggerFactory, ILogger<GetPricesByLocationEndpoint> logger,
         [FromQuery(Name = "lat")] float lat, [FromQuery(Name = "lon")] float lon,
         CancellationToken ct)
     {
@@ -61,7 +61,7 @@ internal abstract class GetPricesByLocationEndpoint
             .Select(s => new PricedStore(s.Id, s.Brand, s.Name, s.Latitude, s.Longitude, externalIdsByStoreId[s.Id]))];
 
         Dictionary<string, IChainPriceFetcher> fetchersByBrand = PriceFetchers.AllByBrand(
-            httpClientFactory, FlareSolverrOptions.IsConfigured(configuration));
+            httpClientFactory, loggerFactory, FlareSolverrOptions.IsConfigured(configuration));
 
         response.ContentType = "application/x-ndjson";
 

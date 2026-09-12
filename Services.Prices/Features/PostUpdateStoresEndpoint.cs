@@ -8,11 +8,11 @@ namespace Services.Prices.Features;
 internal abstract class PostUpdateStoresEndpoint
 {
     public static async Task<NoContent> Handle(
-        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration,
+        Context ctx, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILoggerFactory loggerFactory,
         ILogger<PostUpdateStoresEndpoint> logger, CancellationToken ct)
     {
         await StoreSync.RunAsync(
-            ctx, PriceFetchers.All(httpClientFactory, FlareSolverrOptions.IsConfigured(configuration)), logger, ct);
+            ctx, PriceFetchers.All(httpClientFactory, loggerFactory, FlareSolverrOptions.IsConfigured(configuration)), logger, ct);
         return TypedResults.NoContent();
     }
 }

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Services.Prices.Fetching;
 
 internal static class PriceFetchers
@@ -7,7 +9,8 @@ internal static class PriceFetchers
     /// it, every store sync/price lookup would attempt and fail a Cloudflare-solve against an unreachable
     /// FlareSolverr instance, so it's only included when FlareSolverr:Url is actually configured.
     /// </summary>
-    internal static IChainPriceFetcher[] All(IHttpClientFactory httpClientFactory, bool flareSolverrConfigured)
+    internal static IChainPriceFetcher[] All(
+        IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, bool flareSolverrConfigured)
     {
         List<IChainPriceFetcher> fetchers =
         [
@@ -24,12 +27,13 @@ internal static class PriceFetchers
         if (flareSolverrConfigured)
             fetchers.Add(new ReweePriceFetcher(
                 httpClientFactory.CreateClient(nameof(ReweePriceFetcher)),
-                new FlareSolverrClient(httpClientFactory.CreateClient("FlareSolverr"))));
+                new FlareSolverrClient(httpClientFactory.CreateClient("FlareSolverr")),
+                loggerFactory.CreateLogger<ReweePriceFetcher>()));
 
         return [.. fetchers];
     }
 
     internal static Dictionary<string, IChainPriceFetcher> AllByBrand(
-        IHttpClientFactory httpClientFactory, bool flareSolverrConfigured) =>
-        All(httpClientFactory, flareSolverrConfigured).ToDictionary(f => f.Brand);
+        IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, bool flareSolverrConfigured) =>
+        All(httpClientFactory, loggerFactory, flareSolverrConfigured).ToDictionary(f => f.Brand);
 }
