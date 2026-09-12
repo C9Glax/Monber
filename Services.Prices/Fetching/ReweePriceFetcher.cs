@@ -31,6 +31,14 @@ namespace Services.Prices.Fetching;
 /// flavors (e.g. "Monster Energy 10x0,5l"). A tracked product matches the first tile whose pack-size
 /// suffix - the trailing `10x0,5l`/`0,5l`-style token on the name - equals the tracked pack size, regardless
 /// of which flavor that tile is.
+///
+/// The search page above only ever reflects whichever price is active *today* - a deal that starts next
+/// week never shows there (its price tag renders empty until the deal actually starts, confirmed live).
+/// REWE's own "Prospekt" (flyer) PDF, published per market/week, carries both this week's and next week's
+/// deals, so it's the only source for a future price - see <see cref="ReweeFlyerParser"/>. The flyer page
+/// for a given market+week is resolved via publitas.com (the flyer host REWE embeds), which sits outside
+/// Cloudflare entirely - confirmed live: plain unauthenticated GETs against services.publitas.com and
+/// view.publitas.com both succeed with this same plain HttpClient, no FlareSolverr involved.
 /// </summary>
 internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrClient flareSolverr) : IChainPriceFetcher
 {
@@ -42,6 +50,7 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
 
     private const string FrontendIncludesUrl = "https://www.rewe.de/api/frontend-includes";
     private const string SearchUrl = "https://www.rewe.de/suche/uebersicht?searchTerm=monster+energy";
+    private const string PublicationsUrlTemplate = "https://services.publitas.com/rewe/publications?week={0}&wwident={1}";
 
     private string? _cookieHeader;
     private string? _userAgent;
@@ -106,7 +115,77 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
             }
         }
 
+        await AddFlyerDealsAsync(wwIdent, products, results, ct);
+
         return [.. results];
+    }
+
+    /// <summary>
+    /// Adds current- and next-week flyer deals for tracked products, skipping a current-week one if the
+    /// search lookup above already found a price for that product today (the search result is preferred
+    /// there - it reflects the live site rather than a possibly-not-yet-updated flyer scrape). A
+    /// next-week deal is always added when found, since <see cref="SearchUrl"/> can never report it.
+    /// </summary>
+    private async Task AddFlyerDealsAsync(string wwIdent, string[] products, List<ChainPrice> results, CancellationToken ct)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        int currentWeek = ISOWeek.GetWeekOfYear(today.ToDateTime(TimeOnly.MinValue));
+        int nextWeek = currentWeek == ISOWeek.GetWeeksInYear(today.Year) ? 1 : currentWeek + 1;
+
+        int isoDayOfWeek = today.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)today.DayOfWeek;
+        DateOnly nextMonday = today.AddDays(7 - isoDayOfWeek + 1);
+
+        string currentPublicationsUrl = string.Format(PublicationsUrlTemplate, currentWeek, wwIdent);
+        string nextPublicationsUrl = string.Format(PublicationsUrlTemplate, nextWeek, wwIdent);
+
+        IReadOnlyList<(string PackSizeSuffix, decimal Price)> currentOffers =
+            await DownloadAndParseFlyerAsync(currentPublicationsUrl, ct);
+        IReadOnlyList<(string PackSizeSuffix, decimal Price)> nextOffers =
+            await DownloadAndParseFlyerAsync(nextPublicationsUrl, ct);
+
+        foreach (string product in products)
+        {
+            string packSize = product.Replace("Monster Energy", "", StringComparison.OrdinalIgnoreCase).Trim();
+
+            if (!results.Any(r => r.Product == product && r.EffectiveFrom is null))
+            {
+                foreach ((string offerPackSize, decimal price) in currentOffers)
+                {
+                    if (!offerPackSize.Equals(packSize, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    results.Add(new ChainPrice(product, price, "EUR", SourceUrl: currentPublicationsUrl));
+                    break;
+                }
+            }
+
+            foreach ((string offerPackSize, decimal price) in nextOffers)
+            {
+                if (!offerPackSize.Equals(packSize, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                results.Add(new ChainPrice(product, price, "EUR", nextMonday, nextPublicationsUrl));
+                break;
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<(string PackSizeSuffix, decimal Price)>> DownloadAndParseFlyerAsync(
+        string publicationsUrl, CancellationToken ct)
+    {
+        HttpResponseMessage publicationsResponse = await client.GetAsync(publicationsUrl, ct);
+        if (!publicationsResponse.IsSuccessStatusCode)
+            return [];
+
+        string html = await publicationsResponse.Content.ReadAsStringAsync(ct);
+        Match pdfUrlMatch = DownloadPdfUrlRegex().Match(html);
+        if (!pdfUrlMatch.Success)
+            return [];
+
+        HttpResponseMessage pdfResponse = await client.GetAsync(pdfUrlMatch.Groups["url"].Value, ct);
+        if (!pdfResponse.IsSuccessStatusCode)
+            return [];
+
+        byte[] pdfBytes = await pdfResponse.Content.ReadAsByteArrayAsync(ct);
+        return ReweeFlyerParser.ParseMonsterEnergyOffers(pdfBytes);
     }
 
     private async Task<string?> ResolveNearestMarketAsync(double lat, double lon, CancellationToken ct)
@@ -221,6 +300,9 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
 
     [GeneratedRegex(@"""wwIdent""\s*:\s*""(\d+)""")]
     private static partial Regex WwIdentRegex();
+
+    [GeneratedRegex(@"""downloadPdfUrl""\s*:\s*""(?<url>[^""]+)""")]
+    private static partial Regex DownloadPdfUrlRegex();
 
     [method: JsonConstructor]
     private record OverpassResponse([property: JsonPropertyName("elements")] OverpassElement[] Elements);
