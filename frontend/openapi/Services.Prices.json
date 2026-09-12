@@ -135,6 +135,46 @@
         }
       }
     },
+    "/prices/store/refresh": {
+      "post": {
+        "tags": [
+          "PostRefreshStorePricesEndpoint"
+        ],
+        "parameters": [
+          {
+            "name": "storeId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceObservation"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/prices/history": {
       "get": {
         "tags": [
@@ -361,6 +401,9 @@
     },
     {
       "name": "GetPricesByStoreEndpoint"
+    },
+    {
+      "name": "PostRefreshStorePricesEndpoint"
     },
     {
       "name": "GetPriceHistoryEndpoint"
