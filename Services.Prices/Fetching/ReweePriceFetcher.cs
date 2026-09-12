@@ -108,12 +108,8 @@ internal sealed partial class ReweePriceFetcher(
         // characters (", {, :) that aren't valid in a bare cookie value and get silently dropped.
         string marketCookieValue = Uri.EscapeDataString(
             $$$"""{"stationary":{"wwIdent":"{{{wwIdent}}}","serviceTypes":["STATIONARY"]}}""");
-        // waitInSeconds: the stock badge (data-available) is filled in by a client-side call after the
-        // page's initial render rather than being present in the first response - without this, a search
-        // captured before that call resolves can silently omit it, defaulting a genuinely out-of-stock
-        // tile's price to "available" in ParseTile below.
         FlareSolverrSolution? solution = await flareSolverr.GetAsync(
-            SearchUrl, [new FlareSolverrCookie("wksMarketsCookie", marketCookieValue, ".rewe.de")], ct, waitInSeconds: 5);
+            SearchUrl, [new FlareSolverrCookie("wksMarketsCookie", marketCookieValue, ".rewe.de")], ct);
         string? html = solution?.Response;
         if (html is null)
             return [];
@@ -346,11 +342,10 @@ internal sealed partial class ReweePriceFetcher(
         // right now" - the latter must also suppress the flyer fallback below, or a generic flyer price
         // ends up reported for a product the store's own site says isn't currently available.
         //
-        // A tile missing the stock badge entirely is treated as unavailable rather than available: the
-        // badge should always be present once the page has actually rendered (see the waitInSeconds
-        // comment in FetchPricesAsync above), so a genuinely missing match more likely means the page was
-        // captured mid-render than that this tile has no stock concept - and reporting nothing beats
-        // reporting a price REWE's own site can't currently back up.
+        // A tile missing the stock badge entirely is treated as unavailable rather than available - the
+        // badge is always present in the server-rendered search HTML (confirmed live), so a genuinely
+        // missing match more likely means the markup changed than that this tile has no stock concept,
+        // and reporting nothing beats reporting a price REWE's own site can't currently back up.
         Match availabilityMatch = AvailabilityRegex().Match(tileHtml);
         if (!availabilityMatch.Success)
             logger.LogWarning("Rewe search tile had no data-available marker - treating as out of stock: {Tile}", tileHtml);

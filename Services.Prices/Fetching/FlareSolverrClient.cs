@@ -23,10 +23,10 @@ internal static class FlareSolverrOptions
 internal sealed class FlareSolverrClient(HttpClient client)
 {
     public async Task<FlareSolverrSolution?> GetAsync(
-        string url, IReadOnlyList<FlareSolverrCookie>? cookies, CancellationToken ct, int? waitInSeconds = null)
+        string url, IReadOnlyList<FlareSolverrCookie>? cookies, CancellationToken ct)
     {
         HttpResponseMessage response = await client.PostAsJsonAsync(
-            "/v1", new FlareSolverrRequest("request.get", url, 60000, cookies, waitInSeconds), ct);
+            "/v1", new FlareSolverrRequest("request.get", url, 60000, cookies), ct);
         if (!response.IsSuccessStatusCode)
             return null;
 
@@ -39,11 +39,7 @@ internal sealed class FlareSolverrClient(HttpClient client)
         [property: JsonPropertyName("cmd")] string Cmd,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("maxTimeout")] int MaxTimeout,
-        [property: JsonPropertyName("cookies")] IReadOnlyList<FlareSolverrCookie>? Cookies,
-        // FlareSolverr waits this long, after solving any Cloudflare challenge, before capturing the
-        // response - needed for rewe.de's stock badge (`data-available`), which is filled in by a
-        // client-side call after the initial page render rather than being present in the first response.
-        [property: JsonPropertyName("waitInSeconds")] int? WaitInSeconds = null);
+        [property: JsonPropertyName("cookies")] IReadOnlyList<FlareSolverrCookie>? Cookies);
 
     [method: JsonConstructor]
     private record FlareSolverrResponse(
