@@ -4,10 +4,17 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- Deliberately NOT OpenApiGenerateDocumentsOnBuild - Program.cs runs DB migrations and the
+             Overpass freshness check before app.Run(), and the GetDocument tool executes that same
+             top-level code to discover routes. Wiring generation into every `dotnet build` would fire
+             those side effects (and a live Overpass call once the 24h cache goes stale) on every build.
+             Instead this is only produced on demand via `dotnet build -t:GenerateOpenApiDocuments`
+             (see frontend/package.json's generate:api script). -->
+        <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../frontend/openapi</OpenApiDocumentsDirectory>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
         <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
@@ -15,6 +22,10 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+        <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.12">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
         <PackageReference Include="Scalar.AspNetCore" Version="2.17.2" />
     </ItemGroup>
 

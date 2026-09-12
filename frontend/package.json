@@ -7,17 +7,20 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "generate:api": "node scripts/generate-api-types.mjs"
   },
   "dependencies": {
     "@phosphor-icons/web": "^2.1.2",
     "leaflet": "^1.9.4",
     "nuxt": "^4.5.2",
+    "openapi-fetch": "^0.17.0",
     "vue": "^3.5.41",
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.22",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.3.11"
   }

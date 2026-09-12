@@ -1,0 +1,141 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Services.POI | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/stores": {
+      "get": {
+        "tags": [
+          "GetStoresEndpoint"
+        ],
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "float"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "float"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Store"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores/update": {
+      "post": {
+        "tags": [
+          "PostUpdateStoresEndpoint"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Store": {
+        "required": [
+          "id",
+          "brand",
+          "name",
+          "latitude",
+          "longitude",
+          "openingHours"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The store id (the OpenStreetMap node/way id)",
+            "format": "int64"
+          },
+          "brand": {
+            "type": "string",
+            "description": "The store brand"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The name of the store"
+          },
+          "latitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The latitude of the store",
+            "format": "double"
+          },
+          "longitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The longitude of the store",
+            "format": "double"
+          },
+          "openingHours": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The opening hours of the store"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "GetStoresEndpoint"
+    },
+    {
+      "name": "PostUpdateStoresEndpoint"
+    }
+  ]
+}
