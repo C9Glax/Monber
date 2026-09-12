@@ -5,9 +5,10 @@ import { eur } from '../composables/useStorePrices'
 const props = defineProps<{
   current: MergedStore | null
   future: MergedStore | null
+  refreshing?: boolean
 }>()
 
-const emit = defineEmits<{ show: [] }>()
+const emit = defineEmits<{ show: [], refresh: [] }>()
 
 const identity = computed(() => props.current ?? props.future)
 
@@ -52,9 +53,19 @@ const startsLabel = computed(() => {
       </div>
     </div>
 
-    <button class="btn btn-primary btn-block" :disabled="!identity" @click="emit('show')">
-      <i class="ph ph-navigation-arrow" />Show on map
-    </button>
+    <div class="btn-row">
+      <button class="btn btn-primary" :disabled="!identity" @click="emit('show')">
+        <i class="ph ph-navigation-arrow" />Show on map
+      </button>
+      <button
+        class="btn btn-ghost btn-icon"
+        title="Force refresh prices"
+        :disabled="!identity || refreshing"
+        @click="emit('refresh')"
+      >
+        <i class="ph ph-arrows-clockwise" :class="{ spinning: refreshing }" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -144,5 +155,25 @@ const startsLabel = computed(() => {
   margin-top: 4px;
   font-size: 12px;
   color: var(--color-accent-300);
+}
+.btn-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.btn-row .btn-primary {
+  flex: 1;
+}
+.btn-icon {
+  flex: none;
+  padding-inline: var(--space-2);
+  border: 1px solid var(--color-neutral-800);
+}
+.btn-icon .spinning {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

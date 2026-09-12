@@ -18,10 +18,10 @@ internal static class PriceLookup
 {
     internal static async Task<PriceObservation[]> GetPricesAsync(
         Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
-        PricedStore[] stores, string[] products, ILogger logger, CancellationToken ct)
+        PricedStore[] stores, string[] products, ILogger logger, CancellationToken ct, bool forceRefresh = false)
     {
         List<PriceObservation> results = [];
-        await foreach (PriceStreamEvent evt in StreamPricesAsync(ctx, fetchersByBrand, stores, products, logger, ct))
+        await foreach (PriceStreamEvent evt in StreamPricesAsync(ctx, fetchersByBrand, stores, products, logger, ct, forceRefresh))
             results.AddRange(evt.Observations);
         return [.. results];
     }
@@ -31,10 +31,15 @@ internal static class PriceLookup
     /// store as soon as that store is resolved, instead of buffering every store's result until all of
     /// them are done - lets a caller (e.g. a streaming HTTP endpoint) surface prices progressively.
     /// </summary>
+    /// <param name="forceRefresh">
+    /// When true, ignores today's <see cref="DbPriceCheck"/> freshness and live-fetches every product
+    /// for every store regardless of whether it was already checked today - used by the user-triggered
+    /// "force refresh" action on a single store, as opposed to the normal once-per-store-local-day cache.
+    /// </param>
     internal static async IAsyncEnumerable<PriceStreamEvent> StreamPricesAsync(
         Context ctx, IReadOnlyDictionary<string, IChainPriceFetcher> fetchersByBrand,
         PricedStore[] stores, string[] products, ILogger logger,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct, bool forceRefresh = false)
     {
         foreach (PricedStore store in stores)
         {
@@ -56,7 +61,7 @@ internal static class PriceLookup
             // "checked today" or it would be re-fetched live on every single request forever.
             // A calendar-day comparison, deliberately not a rolling "less than 24h old" window: a check
             // at 23:59 and one at 00:01 the next day are different days, so the second one refetches.
-            string[] fresh = [.. checksByProduct
+            string[] fresh = forceRefresh ? [] : [.. checksByProduct
                 .Where(kv => StoreClock.LocalDate(store, kv.Value.LastCheckedAt) == today)
                 .Select(kv => kv.Key)];
             string[] stale = [.. products.Except(fresh)];

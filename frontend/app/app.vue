@@ -18,8 +18,8 @@ const geocoding = ref(false)
 const geocodeError = ref<string | null>(null)
 
 const {
-  loading, pricesLoading, error, merged, mergedFuture,
-  refresh, inRange, inRangeFuture, pendingInRange, emptyInRange,
+  loading, pricesLoading, error, merged, mergedFuture, refreshingStoreIds,
+  refresh, forceRefreshStore, inRange, inRangeFuture, pendingInRange, emptyInRange,
 } = useStorePrices()
 
 const mapView = ref<{ focus: (s: { lat: number, lon: number }) => void } | null>(null)
@@ -65,6 +65,10 @@ function onStoreMarkerSelect(id: number) {
 function showSelectedOnMap() {
   const store = selectedCurrent.value ?? selectedFuture.value
   if (store) mapView.value?.focus(store)
+}
+
+function refreshSelected() {
+  if (selectedStoreId.value != null) forceRefreshStore(selectedStoreId.value)
 }
 
 function onMapLocationClick(clickLat: number, clickLon: number) {
@@ -155,7 +159,13 @@ onMounted(() => locate())
         <template v-else>
           <CheapestCard :best="best" :area-avg="areaAvg" :prices-loading="pricesLoading" @show="showBestOnMap" />
           <FutureLowestCard :best="futureBest" @show="showFutureBestOnMap" />
-          <SelectedStoreCard :current="selectedCurrent" :future="selectedFuture" @show="showSelectedOnMap" />
+          <SelectedStoreCard
+            :current="selectedCurrent"
+            :future="selectedFuture"
+            :refreshing="selectedStoreId != null && refreshingStoreIds.has(selectedStoreId)"
+            @show="showSelectedOnMap"
+            @refresh="refreshSelected"
+          />
           <StoreList :rows="rangeStores" :area-avg="areaAvg" :prices-loading="pricesLoading" @select="selectStore" />
         </template>
 
