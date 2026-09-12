@@ -28,9 +28,12 @@ namespace Services.Prices.Fetching;
 /// one request per lookup goes through FlareSolverr itself rather than being replayed. REWE's catalog is
 /// far more granular than the tracked-product list (many sub-flavors, pack sizes, "Tiefpreis" labels), but
 /// stores price every flavor of a given pack size identically, so tracked products are pack sizes, not
-/// flavors (e.g. "Monster Energy 10x0,5l"). A tracked product matches the first tile whose pack-size
-/// suffix - the trailing `10x0,5l`/`0,5l`-style token on the name - equals the tracked pack size, regardless
-/// of which flavor that tile is.
+/// flavors (e.g. "Monster Energy 10x0,5l"). A tracked product matches the first in-stock tile whose
+/// pack-size suffix - the trailing `10x0,5l`/`0,5l`-style token on the name - equals the tracked pack size,
+/// regardless of which flavor that tile is; a tile is in stock when its `sps-product-stock` element's
+/// `data-available` attribute is `"true"` rather than `"false"` ("Nicht vorrätig") - confirmed live that an
+/// out-of-stock tile still renders a (stale) price in its `aria-label`, so that flag must be checked
+/// explicitly rather than trusting any tile with a parseable price.
 ///
 /// The search page above only ever reflects whichever price is active *today* - a deal that starts next
 /// week never shows there (its price tag renders empty until the deal actually starts, confirmed live).
@@ -103,7 +106,12 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         if (html is null)
             return [];
 
-        (string PackSize, decimal Price)[] tiles = [.. ProductTileRegex().Matches(html)
+        // Each product tile is a `<article data-product-tile="" ...>` block; splitting on that boundary
+        // (rather than matching the aria-label across the whole page) is what lets ParseTile see that
+        // specific tile's own `data-available` flag instead of a neighboring tile's.
+        int[] tileStarts = [.. ProductTileStartRegex().Matches(html).Select(m => m.Index), html.Length];
+        (string PackSize, decimal Price)[] tiles = [.. Enumerable.Range(0, tileStarts.Length - 1)
+            .Select(i => html[tileStarts[i]..tileStarts[i + 1]])
             .Select(ParseTile)
             .Where(t => t is not null)
             .Select(t => t!.Value)];
@@ -284,8 +292,19 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         return true;
     }
 
-    private static (string PackSize, decimal Price)? ParseTile(Match match)
+    private static (string PackSize, decimal Price)? ParseTile(string tileHtml)
     {
+        Match match = ProductTileRegex().Match(tileHtml);
+        if (!match.Success)
+            return null;
+
+        // A tile whose stock badge reads "Nicht vorrätig" still renders a price (last-known, not current),
+        // so it must be excluded here rather than trusted - confirmed live via
+        // `data-available="false"` on the tile's `sps-product-stock` element.
+        Match availabilityMatch = AvailabilityRegex().Match(tileHtml);
+        if (availabilityMatch.Success && availabilityMatch.Groups["available"].Value == "false")
+            return null;
+
         if (!decimal.TryParse(
                 match.Groups["price"].Value, NumberStyles.Number, CultureInfo.GetCultureInfo("de-DE"), out decimal price))
             return null;
@@ -300,8 +319,14 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
         return (sizeMatch.Value, price);
     }
 
+    [GeneratedRegex(@"<article[^>]*\bdata-product-tile\b")]
+    private static partial Regex ProductTileStartRegex();
+
     [GeneratedRegex(@"aria-label=""(?<name>Monster Energy.+?),\s*(?:Tiefpreis\s+)?(?<price>\d+,\d+)\s*€""")]
     private static partial Regex ProductTileRegex();
+
+    [GeneratedRegex(@"data-available=""(?<available>true|false)""")]
+    private static partial Regex AvailabilityRegex();
 
     [GeneratedRegex(@"\d+(?:x\d+,\d+l|,\d+l)$")]
     private static partial Regex SizeSuffixRegex();
