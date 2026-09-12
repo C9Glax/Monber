@@ -45,8 +45,16 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
     public string Brand => "Rewe";
 
     private const string OverpassApiUrl = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
+
+    // "out center;" (not "out geom;"): node elements still get top-level lat/lon, but way/relation
+    // elements - most mapped supermarkets, since many are mapped as a building outline rather than a
+    // single point - only carry a bounds/geometry array with "out geom;", no top-level lat/lon, which
+    // silently produces Latitude=0/Longitude=0 and drops the store from discovery entirely (it can
+    // then never be matched to a POI store). "center" adds a {lat, lon} centroid for those instead -
+    // see OverpassElement.ResolvedLatitude/ResolvedLongitude, and Services.POI's OverpassDataFetcher,
+    // which hit and fixed the same issue.
     private const string OverpassQuery =
-        "data=[out:json][timeout:60];area(id:3600051477)->.searchArea;nwr[\"shop\"][\"brand\"=\"Rewe\"](area.searchArea);out geom;";
+        "data=[out:json][timeout:60];area(id:3600051477)->.searchArea;nwr[\"shop\"][\"brand\"=\"Rewe\"](area.searchArea);out center;";
 
     private const string FrontendIncludesUrl = "https://www.rewe.de/api/frontend-includes";
     private const string SearchUrl = "https://www.rewe.de/suche/uebersicht?searchTerm=monster+energy";
@@ -72,8 +80,8 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
             return [];
 
         return [.. result.Elements
-            .Where(e => e.Latitude != 0 && e.Longitude != 0)
-            .Select(e => new ChainStore(e.Id.ToString(CultureInfo.InvariantCulture), e.Tags?.Name, e.Latitude, e.Longitude))];
+            .Where(e => e.ResolvedLatitude != 0 && e.ResolvedLongitude != 0)
+            .Select(e => new ChainStore(e.Id.ToString(CultureInfo.InvariantCulture), e.Tags?.Name, e.ResolvedLatitude, e.ResolvedLongitude))];
     }
 
     public async Task<ChainPrice[]> FetchPricesAsync(ChainStore store, string[] products, CancellationToken ct)
@@ -310,9 +318,21 @@ internal sealed partial class ReweePriceFetcher(HttpClient client, FlareSolverrC
     [method: JsonConstructor]
     private record OverpassElement(
         [property: JsonPropertyName("id")] long Id,
-        [property: JsonPropertyName("lat")] double Latitude,
-        [property: JsonPropertyName("lon")] double Longitude,
-        [property: JsonPropertyName("tags")] OverpassTags? Tags);
+        [property: JsonPropertyName("lat")] double? Latitude,
+        [property: JsonPropertyName("lon")] double? Longitude,
+        [property: JsonPropertyName("center")] OverpassCenter? Center,
+        [property: JsonPropertyName("tags")] OverpassTags? Tags)
+    {
+        // Node elements have lat/lon directly; way/relation elements only have a "center" centroid -
+        // see the "out center;" comment on OverpassQuery above.
+        internal double ResolvedLatitude => Latitude ?? Center?.Lat ?? 0;
+        internal double ResolvedLongitude => Longitude ?? Center?.Lon ?? 0;
+    }
+
+    [method: JsonConstructor]
+    private record OverpassCenter(
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon);
 
     [method: JsonConstructor]
     private record OverpassTags([property: JsonPropertyName("name")] string? Name);
