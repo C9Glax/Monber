@@ -9,6 +9,7 @@ internal static class Endpoints
 
         builder.MapGet("/prices", GetPricesByLocationEndpoint.Handle);
         builder.MapGet("/prices/store", GetPricesByStoreEndpoint.Handle);
+        builder.MapPost("/prices/store/refresh", PostRefreshStorePricesEndpoint.Handle);
         builder.MapGet("/prices/history", GetPriceHistoryEndpoint.Handle);
     }
 }

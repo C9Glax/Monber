@@ -41,12 +41,21 @@ export function pricesUrl(lat: number, lon: number): string {
   return `${apiBase()}/prices/prices?lat=${lat}&lon=${lon}`
 }
 
+export function refreshStorePricesUrl(storeId: number): string {
+  return `${apiBase()}/prices/prices/store/refresh?storeId=${storeId}`
+}
+
 export async function fetchPoiStores(lat: number, lon: number, signal?: AbortSignal): Promise<PoiStore[]> {
   return await $fetch<PoiStore[]>(poiStoresUrl(lat, lon), { signal })
 }
 
 export async function fetchPrices(lat: number, lon: number, signal?: AbortSignal): Promise<PriceObservation[]> {
   return await $fetch<PriceObservation[]>(pricesUrl(lat, lon), { signal })
+}
+
+/** Forces a live re-fetch of a single store's prices, bypassing the once-per-day cache. */
+export async function refreshStorePrices(storeId: number, signal?: AbortSignal): Promise<PriceObservation[]> {
+  return await $fetch<PriceObservation[]>(refreshStorePricesUrl(storeId), { method: 'POST', signal })
 }
 
 /**

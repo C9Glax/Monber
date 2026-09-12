@@ -1,5 +1,5 @@
 import type { PoiStore, PriceObservation } from './useMonberApi'
-import { fetchPoiStores, streamPrices } from './useMonberApi'
+import { fetchPoiStores, refreshStorePrices, streamPrices } from './useMonberApi'
 
 /** A tracked pack size. Stores price every flavor of a given pack identically, so flavor isn't tracked -
  * only pack size, since that's what actually moves the per-can price (bulk packs are cheaper per can). */
@@ -142,6 +142,8 @@ export function useStorePrices() {
   const pricesLoading = ref(false)
   const error = ref<string | null>(null)
   const lastQuery = ref<{ lat: number, lon: number } | null>(null)
+  /** Store ids currently being force-refreshed, for a per-store loading indicator. */
+  const refreshingStoreIds = ref<Set<number>>(new Set())
 
   // Not reactive state - just tracks which call is the latest, so a superseded location change
   // can abort its own request and be ignored if it somehow still resolves.
@@ -189,6 +191,28 @@ export function useStorePrices() {
     }
   }
 
+  /**
+   * Bypasses the backend's once-per-store-local-day cache and live-fetches this store's prices now.
+   * Replaces this store's observations in place, leaving every other store's data untouched.
+   */
+  async function forceRefreshStore(storeId: number) {
+    refreshingStoreIds.value = new Set(refreshingStoreIds.value).add(storeId)
+    try {
+      const fresh = await refreshStorePrices(storeId)
+      observations.value = [...observations.value.filter((o) => o.storeId !== storeId), ...fresh]
+      storeStatus.value = new Map(storeStatus.value).set(storeId, fresh.length > 0 ? 'priced' : 'empty')
+    }
+    catch (err) {
+      console.error('Force refresh failed:', err)
+      error.value = 'Could not refresh this store\'s prices.'
+    }
+    finally {
+      const next = new Set(refreshingStoreIds.value)
+      next.delete(storeId)
+      refreshingStoreIds.value = next
+    }
+  }
+
   const merged = computed(() => {
     if (!lastQuery.value) return []
     return mergeStores(pois.value, observations.value, storeStatus.value, lastQuery.value.lat, lastQuery.value.lon)
@@ -230,7 +254,7 @@ export function useStorePrices() {
   }
 
   return {
-    pois, observations, loading, pricesLoading, error, merged, mergedFuture,
-    refresh, inRange, inRangeFuture, pendingInRange, emptyInRange,
+    pois, observations, loading, pricesLoading, error, merged, mergedFuture, refreshingStoreIds,
+    refresh, forceRefreshStore, inRange, inRangeFuture, pendingInRange, emptyInRange,
   }
 }
